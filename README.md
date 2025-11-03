@@ -1,2 +1,1 @@
-# OptiSQL
-query execution enginee
+custom in memory query execution enginee
