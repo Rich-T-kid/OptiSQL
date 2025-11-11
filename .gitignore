@@ -1,0 +1,96 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+ENV/
+env/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test coverage
+*.coverprofile
+coverage.out
+*.cover
+*.coverage
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Redis
+dump.rdb
+appendonly.aof
+*.rdb
+*.aof
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Data files (if you have test data)
+*.csv
+*.json
+*.parquet
+example.csv
+
+# Temporary files
+flycheck0/
+*.flycheck
+
+# Cache directories
+.cache/
+node_modules/

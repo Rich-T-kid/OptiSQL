@@ -1,0 +1,7 @@
+[package]
+name = "opti-sql-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+datafusion = "50.3.0"
