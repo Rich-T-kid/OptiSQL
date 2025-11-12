@@ -19,7 +19,7 @@ OptiSQL is a custom in-memory query execution engine. The backend (physical exec
 ### Prerequisites
 - Go 1.24+
 - Rust 1.70+
-- C++ 23.0
+- C++23
 - Make
 - git
 
