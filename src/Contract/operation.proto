@@ -27,13 +27,13 @@ message SourceType{
 }
 
 enum returnTypes{
-    Success = 0;
-    ParseError = 1;
-    ExecutionError = 2;
-    SourceError = 3;
-    UploadError = 4;
-    OutOfMemory = 5;
-    UnknownError = 6;
+    SUCCESS = 0;
+    PARSE_ERROR = 1;
+    EXECUTION_ERROR = 2;
+    SOURCE_ERROR = 3;
+    UPLOAD_ERROR = 4;
+    OUT_OF_MEMORY = 5;
+    UNKNOWN_ERROR = 6;
 }
 message ErrorDetails{
     returnTypes error_type = 1;
