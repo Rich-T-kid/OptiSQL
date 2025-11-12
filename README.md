@@ -129,4 +129,4 @@ Want to contribute? Check out [CONTRIBUTING.md](CONTRIBUTING.md) for detailed gu
 - Build and run instructions
 
 ## License
-This project is licensed under the terms specified in [LICENSE.txt](LICENSE.txt). 
+This project is licensed under the terms specified in [LICENSE.txt](LICENSE.txt).
