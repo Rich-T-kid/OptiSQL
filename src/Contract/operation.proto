@@ -9,7 +9,7 @@ service SSOperation {
 
 // The request message containing the operation details.
 message QueryExecutionRequest {
-    bytes substraight_logical = 1; //SS logical plan
+    bytes substrait_logical = 1; //SS logical plan
     string sql_statment = 2; // original sql statment
     string id = 3; // unique id for this client
     SourceType source = 4; // (s3 link| base64 data)  
