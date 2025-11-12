@@ -41,4 +41,4 @@ message ErrorDetails{
 }
 
 // Flow:                                     Upload source file to s3             GRPC call                                       write results to s3        
-//(client) -> sql statement + source data  -> Query parser -> (SS,sql,id,s3 link) ->   PerformOperation() -> execution engine -> (proccess data)  ->  s3 result link  -> Query parser -> (s3 result link)  -> (client)
+//(client) -> sql statement + source data  -> Query parser -> (SS,sql,id,s3 link) ->   PerformOperation() -> execution engine -> (process data)  ->  s3 result link  -> Query parser -> (s3 result link)  -> (client)
