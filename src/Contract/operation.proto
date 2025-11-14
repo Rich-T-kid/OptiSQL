@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package contract;
+option go_package = "opti-sql-go/Backend/opti-sql-go/substrait";
 
 // The service definition.
 service SSOperation {

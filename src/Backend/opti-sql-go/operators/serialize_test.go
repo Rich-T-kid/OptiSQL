@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
@@ -754,5 +756,46 @@ func TestNullSchemaSerialize(t *testing.T) {
 	_, err = serializer.SerializeSchema(rb.Schema)
 	if err != nil {
 		t.Fatalf("Schema serialization failed: %v", err)
+	}
+}
+
+func TestSeralizeToDisk(t *testing.T) {
+	r1 := generateDummyRecordBatch1()
+	serializer, err := NewSerializer(r1.Schema)
+	if err != nil {
+		t.Fatalf("Failed to create serializer: %v", err)
+	}
+	randStr := time.Now().Unix()
+	tmpFile, err := os.Create("serialized_data_" + fmt.Sprintf("%d", randStr) + ".bin")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+	schemaContent, _ := serializer.SerializeSchema(r1.Schema)
+	columnContent, _ := serializer.SerializeBatchColumns(r1)
+	schemaContent = append(schemaContent, columnContent...)
+	_, err = tmpFile.Write(schemaContent)
+	if err != nil {
+		t.Fatalf("Failed to write serialized data to disk: %v", err)
+	}
+	// now decode from disk
+	_, err = tmpFile.Seek(0, io.SeekStart)
+	if err != nil {
+		t.Fatalf("Failed to seek to start of file: %v", err)
+	}
+	deserSchema, err := serializer.DeserializeSchema(tmpFile)
+	if err != nil {
+		t.Fatalf("Failed to deserialize schema from disk: %v", err)
+	}
+	if !deserSchema.Equal(r1.Schema) {
+		t.Fatalf("Deserialized schema does not match original schema")
+	}
+	deserColumns, err := serializer.DecodeRecordBatch(tmpFile, deserSchema)
+	if err != nil {
+		t.Fatalf("Failed to deserialize columns from disk: %v", err)
+	}
+	if len(deserColumns) != len(r1.Columns) {
+		t.Fatalf("Column count mismatch after deserialization from disk")
 	}
 }
