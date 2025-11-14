@@ -1,0 +1,25 @@
+server:
+  port: 9090
+  host: "0.0.0.0"
+  timeout: 45
+  maxRequestSizeMB: 25
+
+batch:
+  size: 16384               # 16k rows per batch
+  enableParallelRead: true
+  maxMemoryBeforeSplill: 4294967296   # 4GB
+  maxFileSizeMB: 256
+
+query:
+  enableCache: true
+  cacheTTLSeconds: 300               # 5 mins
+  enableConcurrentExecution: true
+  maxConcurrentQueries: 4
+
+metrics:
+  enableMetrics: true
+  metricsPort: 9100
+  metricsHost: "localhost"
+  exportIntervalSecs: 30
+  enableQueryStats: true
+  enableMemoryStats: true

@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"opti-sql-go/config"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"google.golang.org/grpc"
 )
@@ -12,10 +16,13 @@ import (
 // SubstraitServer receives the substrait plan (gRPC) and sends out the optimized substrait plan (gRPC)
 type SubstraitServer struct {
 	UnimplementedSSOperationServer
+	listener *net.Listener
 }
 
-func newSubstraitServer() *SubstraitServer {
-	return &SubstraitServer{}
+func newSubstraitServer(l *net.Listener) *SubstraitServer {
+	return &SubstraitServer{
+		listener: l,
+	}
 }
 
 // ExecuteQuery implements the gRPC service method
@@ -32,18 +39,43 @@ func (s *SubstraitServer) ExecuteQuery(ctx context.Context, req *QueryExecutionR
 	}, nil
 }
 
-func Start() {
-	port := 8000
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+func Start() chan struct{} {
+	c := config.GetConfig()
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", c.Server.Host, c.Server.Port))
 	if err != nil {
-		log.Fatalf("Failed to listen on port %d: %v", port, err)
+		log.Fatalf("Failed to listen on port %d: %v", c.Server.Port, err)
 	}
 
 	grpcServer := grpc.NewServer()
-	RegisterSSOperationServer(grpcServer, newSubstraitServer())
+	ss := newSubstraitServer(&listener)
+	RegisterSSOperationServer(grpcServer, ss)
 
-	log.Printf("Substrait server listening on port %d", port)
-	if err := grpcServer.Serve(listener); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	stopChan := make(chan struct{})
+
+	log.Printf("Substrait server listening on port %d", c.Server.Port)
+	go unifiedShutdownHandler(ss, grpcServer, stopChan)
+	go func() {
+		if err := grpcServer.Serve(*ss.listener); err != nil {
+			log.Fatalf("Failed to serve: %v", err)
+		}
+	}()
+	return stopChan
+}
+func unifiedShutdownHandler(s *SubstraitServer, grpcServer *grpc.Server, stopChan chan struct{}) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-stopChan:
+		fmt.Println("Shutdown requested by caller.")
+	case sig := <-sigChan:
+		fmt.Printf("Received signal: %v\n", sig)
 	}
+
+	l := *s.listener
+	_ = l.Close()
+
+	grpcServer.GracefulStop()
+
+	fmt.Println("Server shutdown complete")
 }

@@ -1,6 +1,7 @@
 package operators
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -773,4 +774,167 @@ func TestRecordBatchDeepEqual(t *testing.T) {
 			t.Error("Expected empty RecordBatches to be equal")
 		}
 	})
+}
+
+// TestGenTypedArrays exercises the remaining Gen*Array helper functions
+// in a single test with subtests for each type (including GenInt8Array).
+func TestGenTypedArrays(t *testing.T) {
+	rbb := NewRecordBatchBuilder()
+
+	tests := []struct {
+		name     string
+		gen      func() arrow.Array
+		dtype    arrow.DataType
+		validate func(arr arrow.Array) error
+	}{
+		{
+			name:  "GenInt8Array",
+			gen:   func() arrow.Array { return rbb.GenInt8Array(1, -2, 3) },
+			dtype: arrow.PrimitiveTypes.Int8,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Int8)
+				if a.Value(0) != 1 || a.Value(1) != -2 || a.Value(2) != 3 {
+					return fmt.Errorf("unexpected int8 values: %v,%v,%v", a.Value(0), a.Value(1), a.Value(2))
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenInt16Array",
+			gen:   func() arrow.Array { return rbb.GenInt16Array(1000, -2000) },
+			dtype: arrow.PrimitiveTypes.Int16,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Int16)
+				if a.Value(0) != 1000 || a.Value(1) != -2000 {
+					return fmt.Errorf("unexpected int16 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenInt64Array",
+			gen:   func() arrow.Array { return rbb.GenInt64Array(1000000000, -5) },
+			dtype: arrow.PrimitiveTypes.Int64,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Int64)
+				if a.Value(0) != 1000000000 || a.Value(1) != -5 {
+					return fmt.Errorf("unexpected int64 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenUint8Array",
+			gen:   func() arrow.Array { return rbb.GenUint8Array(1, 2, 3) },
+			dtype: arrow.PrimitiveTypes.Uint8,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Uint8)
+				if a.Value(0) != 1 || a.Value(2) != 3 {
+					return fmt.Errorf("unexpected uint8 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenUint16Array",
+			gen:   func() arrow.Array { return rbb.GenUint16Array(100, 200) },
+			dtype: arrow.PrimitiveTypes.Uint16,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Uint16)
+				if a.Value(0) != 100 || a.Value(1) != 200 {
+					return fmt.Errorf("unexpected uint16 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenUint32Array",
+			gen:   func() arrow.Array { return rbb.GenUint32Array(10, 20) },
+			dtype: arrow.PrimitiveTypes.Uint32,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Uint32)
+				if a.Value(0) != 10 || a.Value(1) != 20 {
+					return fmt.Errorf("unexpected uint32 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenUint64Array",
+			gen:   func() arrow.Array { return rbb.GenUint64Array(1234567890, 42) },
+			dtype: arrow.PrimitiveTypes.Uint64,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Uint64)
+				if a.Value(0) != 1234567890 || a.Value(1) != 42 {
+					return fmt.Errorf("unexpected uint64 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenFloat32Array",
+			gen:   func() arrow.Array { return rbb.GenFloat32Array(1.5, -2.25) },
+			dtype: arrow.PrimitiveTypes.Float32,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Float32)
+				if a.Value(0) != float32(1.5) || a.Value(1) != float32(-2.25) {
+					return fmt.Errorf("unexpected float32 values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenBinaryArray",
+			gen:   func() arrow.Array { return rbb.GenBinaryArray([]byte("a"), []byte("bb")) },
+			dtype: arrow.BinaryTypes.Binary,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.Binary)
+				if string(a.Value(0)) != "a" || string(a.Value(1)) != "bb" {
+					return fmt.Errorf("unexpected binary values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenLargeStringArray",
+			gen:   func() arrow.Array { return rbb.GenLargeStringArray("x", "y") },
+			dtype: arrow.BinaryTypes.LargeString,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.LargeString)
+				if a.Value(0) != "x" || a.Value(1) != "y" {
+					return fmt.Errorf("unexpected large string values")
+				}
+				return nil
+			},
+		},
+		{
+			name:  "GenLargeBinaryArray",
+			gen:   func() arrow.Array { return rbb.GenLargeBinaryArray([]byte("z"), []byte("zz")) },
+			dtype: arrow.BinaryTypes.LargeBinary,
+			validate: func(arr arrow.Array) error {
+				a := arr.(*array.LargeBinary)
+				if string(a.Value(0)) != "z" || string(a.Value(1)) != "zz" {
+					return fmt.Errorf("unexpected large binary values")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			arr := tt.gen()
+			defer arr.Release()
+
+			if arr.Len() == 0 {
+				t.Fatalf("%s produced empty array", tt.name)
+			}
+			if !arrow.TypeEqual(arr.DataType(), tt.dtype) {
+				t.Fatalf("%s: expected dtype %s, got %s", tt.name, tt.dtype, arr.DataType())
+			}
+			if err := tt.validate(arr); err != nil {
+				t.Fatalf("%s validation failed: %v", tt.name, err)
+			}
+		})
+	}
 }

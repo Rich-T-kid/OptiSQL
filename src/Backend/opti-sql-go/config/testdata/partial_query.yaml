@@ -1,0 +1,3 @@
+query:
+  enable_cache: false
+  max_concurrent_queries: 8

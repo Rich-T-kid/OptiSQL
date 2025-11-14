@@ -1,0 +1,14 @@
+# Mix of different sections with some fields
+server:
+  timeout: 45
+
+batch:
+  max_memory_before_spill: 3221225472
+
+query:
+  cache_ttl_seconds: 900
+  enable_concurrent_execution: false
+
+metrics:
+  metrics_host: "metrics.example.com"
+  enable_query_stats: false

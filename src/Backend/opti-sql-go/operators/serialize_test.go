@@ -21,13 +21,13 @@ func generateDummyRecordBatch1() RecordBatch {
 		WithField("age", arrow.PrimitiveTypes.Int32, false).
 		WithField("salary", arrow.PrimitiveTypes.Float64, false)
 
-	colums := []arrow.Array{
+	columns := []arrow.Array{
 		dummyBuilder.GenIntArray(1, 2, 3, 4, 5),
 		dummyBuilder.GenStringArray("Alice", "Bob", "Charlie", "David", "Eve"),
 		dummyBuilder.GenIntArray(25, 30, 35, 40, 45),
 		dummyBuilder.GenFloatArray(50000.0, 60000.0, 70000.0, 80000.0, 90000.0),
 	}
-	RecordBatch, _ := dummyBuilder.NewRecordBatch(dummyBuilder.Schema(), colums)
+	RecordBatch, _ := dummyBuilder.NewRecordBatch(dummyBuilder.Schema(), columns)
 	return *RecordBatch
 }
 
@@ -770,8 +770,6 @@ func TestSeralizeToDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
 	schemaContent, _ := serializer.SerializeSchema(r1.Schema)
 	columnContent, _ := serializer.SerializeBatchColumns(r1)
 	schemaContent = append(schemaContent, columnContent...)
@@ -797,5 +795,11 @@ func TestSeralizeToDisk(t *testing.T) {
 	}
 	if len(deserColumns) != len(r1.Columns) {
 		t.Fatalf("Column count mismatch after deserialization from disk")
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+	if err := os.Remove(tmpFile.Name()); err != nil {
+		t.Fatalf("Failed to remove temp file: %v", err)
 	}
 }

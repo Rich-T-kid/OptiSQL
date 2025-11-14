@@ -51,7 +51,7 @@ Column Data
 ├──────────────────────────────────────────┤
 │ ... repeated for N buffers ...           │
 └──────────────────────────────────────────┘
-Int32 exameple (5 elements, validity + values buffers):
+Int32 example (5 elements, validity + values buffers):
 [5]   // array length
 [2]   // numBuffers = 2
 
@@ -81,38 +81,67 @@ column2Block
 └──────────────────────────────────────────┘
 
 
+Record Batch Serialization Protocol
+PURPOSE
+This protocol defines how to serialize intermediate record batches to disk for pipeline-breaking
+operators (sort, join, aggregation) where all records won't fit in RAM.
+KEY ASSUMPTIONS
+
+All batches share the SAME SCHEMA within a single operation
+Examples:
+
+sort(col) - each element is the exact same type
+join(col1 == col2) - keep left side in memory/separate file, right side has same schema
 
 
-What are we look for?
-for serilization for intermediate record batches.
-The main use case is for pipeline breaking operators where its unsafe to assume that all the records wil fit in ram
-This means that all the inputs will the same schema | for example sort(col) -> each element is the exact same | join(col1 == col2) keep the left side in memory/in a seperate file and the right side will have the exact same schema
-
-This means that we can just work with the data directly since well know the schema. Just to be safe we can keep the schema in memory attached directly to the object/class handling the serilization
-
-V1
-Format on disk -> dataTypeSize|dataType|BatchSize|BatchElements|BatchSize|BatchElements.....
-
-but this assumes were are only dealing with one column.
-what about sort order?
-what do we do with the other columns as were writing this single column to disk?
+Schema is kept IN MEMORY attached to the serialization handler for validation
 
 
-We have to write the entire record batch to disk
 
-V2
-write the schema out to disk as well but this is only to validate with the in memory schema
-!! inbetween each column being read into memory check with in memory schema for their data type for correct encoding
-!! schema will also tell u how many columns u have to read in for that specefic record batch
-format on disk -> **schema|ColumnNsize|columnNData|columnN+1size|columnN+1data|columnN+2size|columnN+2data...EndOfrecordBatch|columnNSize|columnNData|....
-format on disk for schema -> number of fields | field1NameLength|field1Name|field1TypeLength|field1Type|field1Nullable| field2NameLength|field2Name|field2TypeLength|field2Type|field2Nullable...
-were going to be writing more data but theres not much we can do about that. for now this is fine
+READING PROCEDURE
 
-optimizations
-(1)wont need to add the schema each time
+Read schema block first (done once at start)
+For each record batch:
+
+Read numberOfFields from in-memory schema
+For each column:
+
+Read columnSize
+Read columnData
+Validate data type against in-memory schema for correct encoding
+
+
+
+
+Schema tells you exactly how many columns to read per batch
+
+IMPORTANT NOTES
+
+Schema is written to disk ONLY for validation against in-memory schema
+Between reading each column, check in-memory schema for data type encoding
+This trades more disk space for safety and clarity
+The interface is implemented by a struct rather than attached to RecordBatch directly
+to save allocations (especially for multiple spills: sort, hash join, aggregation)
+
+==================================
+LOOSE NOTES / DEVELOPMENT HISTORY
+V1 Issues:
+Format was: dataTypeSize|dataType|BatchSize|BatchElements|BatchSize|BatchElements...
+Problems:
+
+Only handled single column
+What about sort order?
+What happens to other columns while writing single column to disk?
+Conclusion: Must write entire record batch to disk
+
+V2 Improvements:
+
+Write schema to disk for validation
+Check schema between reading each column
+Schema indicates how many columns per batch
+Accept that we're writing more data - it's worth it for correctness
 */
-// saves allocations to have a struct that implements this interface than to have this attached directly to RecordBatch
-// especially in the cases where we have to spill to disk multiple times (sort,hash join, aggregation)
+
 type serializer struct {
 	schema *arrow.Schema // schema is always attached to the serializer
 }
@@ -168,10 +197,8 @@ func (ss *serializer) SerializeSchema(s *arrow.Schema) ([]byte, error) {
 		var nullable uint8
 		if f.Nullable {
 			nullable = 1
-			fmt.Println("case 1")
 		} else {
 			nullable = 0
-			fmt.Println("case 0")
 		}
 		if err := binary.Write(buf, binary.LittleEndian, nullable); err != nil {
 			return nil, err
@@ -426,3 +453,37 @@ FILE:
 └────────────────────────┘
 EOF
 */
+
+// lose notes / development history
+/*
+
+What are we look for?
+for serialization for intermediate record batches.
+The main use case is for pipeline breaking operators where its unsafe to assume that all the records will fit in ram
+This means that all the inputs will the same schema | for example sort(col) -> each element is the exact same | join(col1 == col2) keep the left side in memory/in a separate file and the right side will have the exact same schema
+
+This means that we can just work with the data directly since well know the schema. Just to be safe we can keep the schema in memory attached directly to the object/class handling the serialization
+
+V1
+Format on disk -> dataTypeSize|dataType|BatchSize|BatchElements|BatchSize|BatchElements.....
+
+but this assumes were are only dealing with one column.
+what about sort order?
+what do we do with the other columns as were writing this single column to disk?
+
+
+We have to write the entire record batch to disk
+
+V2
+write the schema out to disk as well but this is only to validate with the in memory schema
+!! inbetween each column being read into memory check with in memory schema for their data type for correct encoding
+!! schema will also tell u how many columns u have to read in for that specific record batch
+format on disk -> **schema|ColumnNsize|columnNData|columnN+1size|columnN+1data|columnN+2size|columnN+2data...EndOfrecordBatch|columnNSize|columnNData|....
+format on disk for schema -> number of fields | field1NameLength|field1Name|field1TypeLength|field1Type|field1Nullable| field2NameLength|field2Name|field2TypeLength|field2Type|field2Nullable...
+were going to be writing more data but theres not much we can do about that. for now this is fine
+
+optimizations
+(1)wont need to add the schema each time
+*/
+// saves allocations to have a struct that implements this interface than to have this attached directly to RecordBatch
+// especially in the cases where we have to spill to disk multiple times (sort,hash join, aggregation)
