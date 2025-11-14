@@ -19,7 +19,7 @@ OptiSQL is a custom in-memory query execution engine. The backend (physical exec
 ### Prerequisites
 - Go 1.24+
 - Rust 1.70+
-- C++ (marco update this)
+- C++23
 - Make
 - git
 
@@ -72,7 +72,6 @@ Initial development is done in **Go** (`opti-sql-go`), which serves as the prima
 - `/operators` - SQL operator implementations (filter, join, aggregation, project)
 - `/physical-optimizer` - Query plan parsing and optimization
 - `/substrait` - Substrait plan integration
-- `/project` - [Add description]
 
 ## Branching Model
 
@@ -130,6 +129,4 @@ Want to contribute? Check out [CONTRIBUTING.md](CONTRIBUTING.md) for detailed gu
 - Build and run instructions
 
 ## License
-
 This project is licensed under the terms specified in [LICENSE.txt](LICENSE.txt).
-

@@ -94,3 +94,12 @@ flycheck0/
 # Cache directories
 .cache/
 node_modules/
+
+# dont push large files to git
+src/Backend/test_data/parquet
+src/Backend/test_data/csv
+src/Backend/test_data/json
+
+# Allow s3_source directory
+!src/Backend/test_data/s3_source/
+!src/Backend/test_data/s3_source/**

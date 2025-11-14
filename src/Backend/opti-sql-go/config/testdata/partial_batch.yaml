@@ -1,0 +1,3 @@
+batch:
+  size: 4096
+  enable_parallel_read: false

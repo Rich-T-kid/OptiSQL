@@ -1,0 +1,27 @@
+# Test zero values - should NOT override defaults for numbers/strings
+# but SHOULD override for booleans
+server:
+  port: 0
+  host: ""
+  timeout: 0
+  max_request_size_mb: 0
+
+batch:
+  size: 0
+  enable_parallel_read: false  # Should override (boolean)
+  max_memory_before_spill: 0
+  max_file_size_mb: 0
+
+query:
+  enable_cache: false  # Should override (boolean)
+  cache_ttl_seconds: 0
+  enable_concurrent_execution: false  # Should override (boolean)
+  max_concurrent_queries: 0
+
+metrics:
+  enable_metrics: false  # Should override (boolean)
+  metrics_port: 0
+  metrics_host: ""
+  export_interval_secs: 0
+  enable_query_stats: false  # Should override (boolean)
+  enable_memory_stats: false  # Should override (boolean)

@@ -1,0 +1,25 @@
+server:
+  port: 9090
+  host: "0.0.0.0"
+  timeout: 60
+  max_request_size_mb: 25
+
+batch:
+  size: 16384
+  enable_parallel_read: false
+  max_memory_before_spill: 4294967296
+  max_file_size_mb: 1000
+
+query:
+  enable_cache: false
+  cache_ttl_seconds: 1200
+  enable_concurrent_execution: false
+  max_concurrent_queries: 4
+
+metrics:
+  enable_metrics: false
+  metrics_port: 8888
+  metrics_host: "127.0.0.1"
+  export_interval_secs: 120
+  enable_query_stats: false
+  enable_memory_stats: false

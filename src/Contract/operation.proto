@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package contract;
+option go_package = "opti-sql-go/Backend/opti-sql-go/substrait";
+
+// The service definition.
+service SSOperation {
+    rpc  ExecuteQuery(QueryExecutionRequest) returns (QueryExecutionResponse);
+}
+
+// The request message containing the operation details.
+message QueryExecutionRequest {
+    bytes substrait_logical = 1; // Substrait logical plan: serialized representation of the query execution
+    string sql_statement = 2; // original sql statement
+    string id = 3; // unique id for this client
+    SourceType source = 4; // (s3 link| base64 data)  
+}
+
+// The response message containing the result.
+message QueryExecutionResponse {
+    string s3_result_link = 1; // s3 link to the result data
+    ErrorDetails error_type = 2; // error type if any
+}
+
+message SourceType{ 
+    string s3_source = 1; // s3 link to the source data
+    string mime = 2;
+}
+
+enum returnTypes{
+    SUCCESS = 0;
+    PARSE_ERROR = 1;
+    EXECUTION_ERROR = 2;
+    SOURCE_ERROR = 3;
+    UPLOAD_ERROR = 4;
+    OUT_OF_MEMORY = 5;
+    UNKNOWN_ERROR = 6;
+}
+message ErrorDetails{
+    returnTypes error_type = 1;
+    string message = 2;
+}
+
+// Flow:                                     Upload source file to s3             GRPC call                                       write results to s3        
+//(client) -> sql statement + source data  -> Query parser -> (SS,sql,id,s3 link) ->   PerformOperation() -> execution engine -> (process data)  ->  s3 result link  -> Query parser -> (s3 result link)  -> (client)

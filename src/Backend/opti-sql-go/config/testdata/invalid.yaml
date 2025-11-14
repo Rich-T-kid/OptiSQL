@@ -1,0 +1,4 @@
+server:
+  port: "not a number"
+  invalid_field: true
+[this is not valid yaml

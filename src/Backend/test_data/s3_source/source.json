@@ -1,0 +1,16 @@
+{
+    "meta_data":"names of s3 files",
+    "csv_files":[
+        "s3://my-bucket/data/file1.csv",
+        "s3://my-bucket/data/file2.csv",
+        "s3://my-bucket/data/file3.csv"
+    ],
+    "json_files":[
+        "s3://my-bucket/data/file1.json",
+        "s3://my-bucket/data/file2.json"
+    ],
+    "parquet_files":[
+        "s3://my-bucket/data/file1.parquet",
+        "s3://my-bucket/data/file2.parquet"
+    ]
+}
