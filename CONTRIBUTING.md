@@ -20,10 +20,10 @@ We use a Makefile to simplify common development tasks. All commands should be r
   make go-test-coverage
   ```
 - Run test with html coverage
-```bash
-
-go tool cover -html=coverage.out
-```
+  ```bash
+  go tool cover -func=coverage.out
+  go tool cover -html=coverage.out
+  ```
 
 
 ### Rust Tests
