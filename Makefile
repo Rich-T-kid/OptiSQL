@@ -29,7 +29,6 @@ go-test-coverage:
 	@echo "Running Go tests with coverage..."
 	cd src/Backend/opti-sql-go && go test -v -coverprofile=coverage.out ./...
 	cd src/Backend/opti-sql-go && go tool cover -func=coverage.out
-
 go-run:
 	@echo "Running Go application..."
 	cd src/Backend/opti-sql-go && go run main.go

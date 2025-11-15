@@ -15,6 +15,9 @@ var (
 	}
 )
 
+type Operator interface {
+	Next(uint16) (*RecordBatch, error)
+}
 type RecordBatch struct {
 	Schema  *arrow.Schema
 	Columns []arrow.Array
