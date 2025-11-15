@@ -21,7 +21,7 @@ We use a Makefile to simplify common development tasks. All commands should be r
   ```
 - Run test with html coverage
   ```bash
-  go tool cover -func=coverage.out
+  go test ./... -coverprofile=coverage.out 
   go tool cover -html=coverage.out
   ```
 

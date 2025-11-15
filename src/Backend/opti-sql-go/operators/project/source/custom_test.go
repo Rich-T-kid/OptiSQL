@@ -499,13 +499,20 @@ func TestNewInMemoryProjectExec(t *testing.T) {
 	})
 
 	t.Run("Unsupported type - supportedType returns false", func(t *testing.T) {
+		// Custom struct type is not supported
+		type CustomStruct struct {
+			ID   int
+			Name string
+		}
+
 		names := []string{"col1"}
-		columns := []any{[]byte{1, 2, 3}} // byte slice is not supported
+		columns := []any{[]CustomStruct{{1, "test"}, {2, "data"}}}
 
 		_, err := NewInMemoryProjectExec(names, columns)
-		if err != nil {
-			t.Error("unexpected error for unsupported type in NewInMemoryProjectExec")
+		if err == nil {
+			t.Error("Expected error for unsupported type, got nil")
 		}
+
 	})
 
 	t.Run("Single column", func(t *testing.T) {
