@@ -22,14 +22,14 @@ var (
 	}
 )
 
-type InMemoryProjectExec struct {
+type InMemorySource struct {
 	schema        *arrow.Schema
 	columns       []arrow.Array
 	pos           uint64
 	fieldToColIDx map[string]int
 }
 
-func NewInMemoryProjectExec(names []string, columns []any) (*InMemoryProjectExec, error) {
+func NewInMemoryProjectExec(names []string, columns []any) (*InMemorySource, error) {
 	if len(names) != len(columns) {
 		return nil, operators.ErrInvalidSchema("number of column names and columns do not match")
 	}
@@ -49,51 +49,50 @@ func NewInMemoryProjectExec(names []string, columns []any) (*InMemoryProjectExec
 		arrays = append(arrays, arr)
 		fieldToColIDx[field.Name] = i
 	}
-	return &InMemoryProjectExec{
+	return &InMemorySource{
 		schema:        arrow.NewSchema(fields, nil),
 		columns:       arrays,
 		fieldToColIDx: fieldToColIDx,
 	}, nil
 }
-func (ime *InMemoryProjectExec) withFields(names ...string) error {
+func (ms *InMemorySource) withFields(names ...string) error {
 
-	newSchema, cols, err := project.ProjectSchemaFilterDown(ime.schema, ime.columns, names...)
+	newSchema, cols, err := project.ProjectSchemaFilterDown(ms.schema, ms.columns, names...)
 	if err != nil {
 		return err
 	}
 	newMap := make(map[string]int)
 	for i, f := range newSchema.Fields() {
 		newMap[f.Name] = i
-		fmt.Printf("%s:%d", f.Name, i)
 	}
-	ime.schema = newSchema
-	ime.fieldToColIDx = newMap
-	ime.columns = cols
+	ms.schema = newSchema
+	ms.fieldToColIDx = newMap
+	ms.columns = cols
 	return nil
 }
-func (ime *InMemoryProjectExec) Next(n uint64) (*operators.RecordBatch, error) {
-	if ime.pos >= uint64(ime.columns[0].Len()) {
+func (ms *InMemorySource) Next(n uint64) (*operators.RecordBatch, error) {
+	if ms.pos >= uint64(ms.columns[0].Len()) {
 		return nil, io.EOF // EOF
 	}
 	var currRows uint64 = 0
-	outPutCols := make([]arrow.Array, len(ime.schema.Fields()))
+	outPutCols := make([]arrow.Array, len(ms.schema.Fields()))
 
-	for i, field := range ime.schema.Fields() {
-		col := ime.columns[ime.fieldToColIDx[field.Name]]
+	for i, field := range ms.schema.Fields() {
+		col := ms.columns[ms.fieldToColIDx[field.Name]]
 		colLen := uint64(col.Len())
-		remaining := colLen - ime.pos
+		remaining := colLen - ms.pos
 		toRead := n
 		if remaining < n {
 			toRead = remaining
 		}
-		slice := array.NewSlice(col, int64(ime.pos), int64(ime.pos+toRead))
+		slice := array.NewSlice(col, int64(ms.pos), int64(ms.pos+toRead))
 		outPutCols[i] = slice
 		currRows = toRead
 	}
-	ime.pos += currRows
+	ms.pos += currRows
 
 	return &operators.RecordBatch{
-		Schema:  ime.schema,
+		Schema:  ms.schema,
 		Columns: outPutCols,
 	}, nil
 }

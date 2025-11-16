@@ -9,6 +9,7 @@ import (
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
+	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
 const csvFilePath = "../../../../test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv"
@@ -942,6 +943,29 @@ func TestIntegrationWithRealFile(t *testing.T) {
 			}
 		}
 	})
+}
+func TestProccessFirstLine(t *testing.T) {
+	v := getTestFile()
+	p, err := NewProjectCSVLeaf(v)
+	if err != nil {
+		t.Errorf("Failed to create ProjectCSVLeaf: %v", err)
+	}
+	defer func() {
+		if err := v.Close(); err != nil {
+			t.Fatalf("failed to close: %v", err)
+		}
+	}()
+	var builders []array.Builder
+	for range len(p.schema.Fields()) {
+		builder := array.NewBuilder(memory.DefaultAllocator, &arrow.Date64Type{})
+		defer builder.Release()
+		builders = append(builders, builder)
+	}
+	err = p.processRow([]string{"1", "alice", "95.5", "true"}, builders)
+	if err == nil {
+		t.Errorf("Expected error for empty row, got nil")
+	}
+
 }
 
 /*

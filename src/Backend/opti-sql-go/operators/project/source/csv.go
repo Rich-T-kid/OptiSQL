@@ -13,7 +13,9 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 )
 
-type ProjectCSVLeaf struct {
+// TODO: change the leaf stuff to be called scans instead
+
+type CSVSource struct {
 	r            *csv.Reader
 	schema       *arrow.Schema // columns to project as well as types to cast to
 	colPosition  map[string]int
@@ -22,9 +24,9 @@ type ProjectCSVLeaf struct {
 }
 
 // assume everything is on disk for now
-func NewProjectCSVLeaf(source io.Reader) (*ProjectCSVLeaf, error) {
+func NewProjectCSVLeaf(source io.Reader) (*CSVSource, error) {
 	r := csv.NewReader(source)
-	proj := &ProjectCSVLeaf{
+	proj := &CSVSource{
 		r:           r,
 		colPosition: make(map[string]int),
 	}
@@ -34,31 +36,32 @@ func NewProjectCSVLeaf(source io.Reader) (*ProjectCSVLeaf, error) {
 	return proj, err
 }
 
-func (pcsv *ProjectCSVLeaf) Next(n uint64) (*operators.RecordBatch, error) {
-	if pcsv.done {
+func (csvS *CSVSource) Next(n uint64) (*operators.RecordBatch, error) {
+	if csvS.done {
 		return nil, io.EOF
 	}
 
 	// 1. Create builders
-	builders := pcsv.initBuilders()
+	builders := csvS.initBuilders()
 
 	rowsRead := uint64(0)
 
 	// Process stored first row (from parseHeader) ---
-	if pcsv.firstDataRow != nil && rowsRead < n {
-		if err := pcsv.processRow(pcsv.firstDataRow, builders); err != nil {
+	if csvS.firstDataRow != nil && rowsRead < n {
+		fmt.Printf("First row: %v\n", csvS.firstDataRow)
+		if err := csvS.processRow(csvS.firstDataRow, builders); err != nil {
 			return nil, err
 		}
-		pcsv.firstDataRow = nil // consume it once
+		csvS.firstDataRow = nil // consume it once
 		rowsRead++
 	}
 
 	//  Stream remaining rows from CSV reader ---
 	for rowsRead < n {
-		row, err := pcsv.r.Read()
+		row, err := csvS.r.Read()
 		if err == io.EOF {
 			if rowsRead == 0 {
-				pcsv.done = true
+				csvS.done = true
 				return nil, io.EOF
 			}
 			break
@@ -68,7 +71,7 @@ func (pcsv *ProjectCSVLeaf) Next(n uint64) (*operators.RecordBatch, error) {
 		}
 
 		// append to builders
-		if err := pcsv.processRow(row, builders); err != nil {
+		if err := csvS.processRow(row, builders); err != nil {
 			return nil, err
 		}
 
@@ -76,16 +79,16 @@ func (pcsv *ProjectCSVLeaf) Next(n uint64) (*operators.RecordBatch, error) {
 	}
 
 	//  Freeze into Arrow arrays
-	columns := pcsv.finalizeBuilders(builders)
+	columns := csvS.finalizeBuilders(builders)
 
 	return &operators.RecordBatch{
-		Schema:  pcsv.schema,
+		Schema:  csvS.schema,
 		Columns: columns,
 	}, nil
 }
 
-func (pcsv *ProjectCSVLeaf) initBuilders() []array.Builder {
-	fields := pcsv.schema.Fields()
+func (csvS *CSVSource) initBuilders() []array.Builder {
+	fields := csvS.schema.Fields()
 	builders := make([]array.Builder, len(fields))
 
 	for i, f := range fields {
@@ -94,14 +97,14 @@ func (pcsv *ProjectCSVLeaf) initBuilders() []array.Builder {
 
 	return builders
 }
-func (pcsv *ProjectCSVLeaf) processRow(
+func (csvS *CSVSource) processRow(
 	content []string,
 	builders []array.Builder,
 ) error {
-	fields := pcsv.schema.Fields()
-
+	fields := csvS.schema.Fields()
+	fmt.Printf("content : %v\n", content)
 	for i, f := range fields {
-		colIdx := pcsv.colPosition[f.Name]
+		colIdx := csvS.colPosition[f.Name]
 		cell := content[colIdx]
 
 		switch b := builders[i].(type) {
@@ -143,7 +146,7 @@ func (pcsv *ProjectCSVLeaf) processRow(
 
 	return nil
 }
-func (pcsv *ProjectCSVLeaf) finalizeBuilders(builders []array.Builder) []arrow.Array {
+func (csvS *CSVSource) finalizeBuilders(builders []array.Builder) []arrow.Array {
 	columns := make([]arrow.Array, len(builders))
 
 	for i, b := range builders {
@@ -155,16 +158,16 @@ func (pcsv *ProjectCSVLeaf) finalizeBuilders(builders []array.Builder) []arrow.A
 }
 
 // first call to csv.Reader
-func (pscv *ProjectCSVLeaf) parseHeader() (*arrow.Schema, error) {
-	header, err := pscv.r.Read()
+func (csvS *CSVSource) parseHeader() (*arrow.Schema, error) {
+	header, err := csvS.r.Read()
 	if err != nil {
 		return nil, err
 	}
-	firstDataRow, err := pscv.r.Read()
+	firstDataRow, err := csvS.r.Read()
 	if err != nil {
 		return nil, err
 	}
-	pscv.firstDataRow = firstDataRow
+	csvS.firstDataRow = firstDataRow
 	newFields := make([]arrow.Field, 0, len(header))
 	for i, colName := range header {
 		sampleValue := firstDataRow[i]
@@ -173,7 +176,7 @@ func (pscv *ProjectCSVLeaf) parseHeader() (*arrow.Schema, error) {
 			Type:     parseDataType(sampleValue),
 			Nullable: true,
 		})
-		pscv.colPosition[colName] = i
+		csvS.colPosition[colName] = i
 	}
 	return arrow.NewSchema(newFields, nil), nil
 }

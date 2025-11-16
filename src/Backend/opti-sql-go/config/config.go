@@ -32,8 +32,9 @@ type batchConfig struct {
 	EnableParallelRead   bool   `yaml:"enable_parallel_read"`
 	MaxMemoryBeforeSpill uint64 `yaml:"max_memory_before_spill"`
 	MaxFileSizeMB        int    `yaml:"max_file_size_mb"` // max size of a single file
-	ShouldDowndload      bool   `yaml:"should_download"`
-	MaxDownloadSizeMB    int    `yaml:"max_download_size_mb"` // max size to download from external sources like S3
+	// TODO: add test for these two fileds, just add to existing test
+	ShouldDowndload   bool `yaml:"should_download"`
+	MaxDownloadSizeMB int  `yaml:"max_download_size_mb"` // max size to download from external sources like S3
 }
 type queryConfig struct {
 	// should results be cached, server side? if so how long
