@@ -103,3 +103,10 @@ src/Backend/test_data/json
 # Allow s3_source directory
 !src/Backend/test_data/s3_source/
 !src/Backend/test_data/s3_source/**
+
+# Allow a specific CSV dataset that we want tracked despite the general csv ignores
+!src/Backend/test_data/csv/
+!src/Backend/test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv
+# allow parquet file
+!src/Backend/test_data/parquet/
+!src/Backend/test_data/parquet/capitals_clean.parquet
