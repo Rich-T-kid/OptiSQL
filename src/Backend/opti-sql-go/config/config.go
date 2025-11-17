@@ -16,10 +16,11 @@ var (
 )
 
 type Config struct {
-	Server  serverConfig  `yaml:"server"`
-	Batch   batchConfig   `yaml:"batch"`
-	Query   queryConfig   `yaml:"query"`
-	Metrics metricsConfig `yaml:"metrics"`
+	Server   serverConfig   `yaml:"server"`
+	Batch    batchConfig    `yaml:"batch"`
+	Query    queryConfig    `yaml:"query"`
+	Metrics  metricsConfig  `yaml:"metrics"`
+	Secretes secretesConfig // do not read these from yaml
 }
 type serverConfig struct {
 	Port             int    `yaml:"port"`
@@ -54,6 +55,12 @@ type metricsConfig struct {
 	// memory usage over time
 	EnableMemoryStats bool `yaml:"enable_memory_stats"`
 }
+type secretesConfig struct {
+	AccessKey   string `yaml:"access_key"`
+	SecretKey   string `yaml:"secret_key"`
+	EndpointURL string `yaml:"endpoint_url"`
+	BucketName  string `yaml:"bucket_name"`
+}
 
 var configInstance *Config = &Config{
 	Server: serverConfig{
@@ -85,6 +92,13 @@ var configInstance *Config = &Config{
 		ExportIntervalSecs: 60, // 1 minute
 		EnableQueryStats:   true,
 		EnableMemoryStats:  true,
+	},
+	// TODO: remove hardcoded secretes before production. we are just testing for now
+	Secretes: secretesConfig{
+		AccessKey:   "DO8013ZT6VDHJ2EM94RN",
+		SecretKey:   "kPvQSMt6naiwe/FhDnzXpYmVE5yzJUsIR0/OJpsUNzo",
+		EndpointURL: "atl1.digitaloceanspaces.com",
+		BucketName:  "test-bucket-pull-down",
 	},
 }
 

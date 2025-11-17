@@ -26,8 +26,44 @@ type ParquetSource struct {
 	done bool // if set to true always return io.EOF
 }
 
+func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
+	allocator := memory.NewGoAllocator()
+	filerReader, err := file.NewParquetReader(r)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := filerReader.Close(); err != nil {
+			fmt.Printf("warning: failed to close parquet reader: %v\n", err)
+
+		}
+	}()
+
+	arrowReader, err := pqarrow.NewFileReader(
+		filerReader,
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 5}, // TODO: Read in from config for this stuff
+		allocator,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rdr, err := arrowReader.GetRecordReader(context.TODO(), nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ParquetSource{
+		Schema:             rdr.Schema(),
+		projectionPushDown: []string{},
+		predicatePushDown:  nil,
+		reader:             rdr,
+	}, nil
+
+}
+
 // source, columns you want to be push up the tree, any filters
-func NewParquetSource(r parquet.ReaderAtSeeker, columns []string, filters []filter.FilterExpr) (*ParquetSource, error) {
+func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string, filters []filter.FilterExpr) (*ParquetSource, error) {
 	if len(columns) == 0 {
 		return nil, errors.New("no columns were provided for projection push down")
 	}

@@ -86,6 +86,11 @@ func (csvS *CSVSource) Next(n uint64) (*operators.RecordBatch, error) {
 		Columns: columns,
 	}, nil
 }
+func (csvS *CSVSource) Close() error {
+	csvS.r = nil
+	csvS.done = true
+	return nil
+}
 
 func (csvS *CSVSource) initBuilders() []array.Builder {
 	fields := csvS.schema.Fields()
@@ -102,7 +107,6 @@ func (csvS *CSVSource) processRow(
 	builders []array.Builder,
 ) error {
 	fields := csvS.schema.Fields()
-	fmt.Printf("content : %v\n", content)
 	for i, f := range fields {
 		colIdx := csvS.colPosition[f.Name]
 		cell := content[colIdx]
