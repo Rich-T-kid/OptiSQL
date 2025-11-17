@@ -21,12 +21,10 @@ type ProjectExec struct {
 	child         operators.Operator
 	outputschema  arrow.Schema
 	columnsToKeep []string
-	// if done always return eof
-	done bool
+	done          bool
 }
 
-// columns to keep and existing scehma
-// TODO: double check that calling operator.Schema here is fine, this means make sure all operators have their schema in order as soons as possible
+// columns to keep and existing schema
 func NewProjectExec(projectColumns []string, input operators.Operator) (*ProjectExec, error) {
 	newSchema, err := prunedSchema(input.Schema(), projectColumns)
 	if err != nil {
@@ -74,7 +72,7 @@ func (p *ProjectExec) Schema() *arrow.Schema {
 	return &p.outputschema
 }
 
-// handle keeping only the request columsn but make sure the schema and columns are also aligned
+// handle keeping only the request columns but make sure the schema and columns are also aligned
 // returns error if a column doesnt exist
 func ProjectSchemaFilterDown(schema *arrow.Schema, cols []arrow.Array, keepCols ...string) (*arrow.Schema, []arrow.Array, error) {
 	if len(keepCols) == 0 {
@@ -107,8 +105,6 @@ func ProjectSchemaFilterDown(schema *arrow.Schema, cols []arrow.Array, keepCols 
 	return newSchema, newCols, nil
 }
 
-// passing in a coulumn to keep that doesnt exist returns error
-// passing in no columns returns and error
 func prunedSchema(schema *arrow.Schema, keepCols []string) (*arrow.Schema, error) {
 	if len(keepCols) == 0 {
 		return arrow.NewSchema([]arrow.Field{}, nil), ErrEmptyColumnsToProject

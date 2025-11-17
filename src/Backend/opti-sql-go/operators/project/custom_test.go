@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"io"
 	"testing"
 
@@ -75,7 +74,7 @@ func TestInMemoryBatchInit(t *testing.T) {
 	if len(projC.columns) != projC.schema.NumFields() {
 		t.Errorf("Columns and schema field count mismatch: got %d and %d", len(projC.columns), projC.schema.NumFields())
 	}
-	fmt.Printf("schema: %v\n", projC.schema)
+	t.Logf("schema: %v\n", projC.schema)
 }
 
 // ==================== COMPREHENSIVE TESTS FOR 100% CODE COVERAGE ====================
@@ -135,7 +134,7 @@ func TestSupportedType(t *testing.T) {
 // TestUnpackColumn tests every branch of the unpackColumm function
 func TestUnpackColumn(t *testing.T) {
 	t.Run("[]int type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_int", []int{1, 2, 3, 4, 5})
+		field, arr, err := unpackColumn("test_int", []int{1, 2, 3, 4, 5})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -163,7 +162,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]int8 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_int8", []int8{-1, 0, 1, 127})
+		field, arr, err := unpackColumn("test_int8", []int8{-1, 0, 1, 127})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -180,7 +179,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]int16 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_int16", []int16{-100, 0, 100, 32767})
+		field, arr, err := unpackColumn("test_int16", []int16{-100, 0, 100, 32767})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -197,7 +196,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]int32 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_int32", []int32{-1000, 0, 1000, 2147483647})
+		field, arr, err := unpackColumn("test_int32", []int32{-1000, 0, 1000, 2147483647})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -214,7 +213,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]int64 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_int64", []int64{-9223372036854775808, 0, 9223372036854775807})
+		field, arr, err := unpackColumn("test_int64", []int64{-9223372036854775808, 0, 9223372036854775807})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -231,7 +230,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]uint type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_uint", []uint{0, 1, 100, 1000})
+		field, arr, err := unpackColumn("test_uint", []uint{0, 1, 100, 1000})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -254,7 +253,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]uint8 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_uint8", []uint8{0, 1, 255})
+		field, arr, err := unpackColumn("test_uint8", []uint8{0, 1, 255})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -271,7 +270,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]uint16 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_uint16", []uint16{0, 100, 65535})
+		field, arr, err := unpackColumn("test_uint16", []uint16{0, 100, 65535})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -288,7 +287,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]uint32 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_uint32", []uint32{0, 1000, 4294967295})
+		field, arr, err := unpackColumn("test_uint32", []uint32{0, 1000, 4294967295})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -305,7 +304,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]uint64 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_uint64", []uint64{0, 1000, 18446744073709551615})
+		field, arr, err := unpackColumn("test_uint64", []uint64{0, 1000, 18446744073709551615})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -322,7 +321,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]float32 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_float32", []float32{-1.5, 0.0, 1.5, 3.14159})
+		field, arr, err := unpackColumn("test_float32", []float32{-1.5, 0.0, 1.5, 3.14159})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -339,7 +338,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]float64 type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_float64", []float64{-2.718281828, 0.0, 3.141592653589793})
+		field, arr, err := unpackColumn("test_float64", []float64{-2.718281828, 0.0, 3.141592653589793})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -356,7 +355,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]string type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_string", []string{"hello", "world", "test", ""})
+		field, arr, err := unpackColumn("test_string", []string{"hello", "world", "test", ""})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -379,7 +378,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("[]bool type", func(t *testing.T) {
-		field, arr, err := unpackColumm("test_bool", []bool{true, false, true, false, true})
+		field, arr, err := unpackColumn("test_bool", []bool{true, false, true, false, true})
 		if err != nil {
 			t.Fatalf("unpackColumm failed: %v", err)
 		}
@@ -402,7 +401,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("Unsupported type - default case", func(t *testing.T) {
-		_, _, err := unpackColumm("test_unsupported", []byte{1, 2, 3})
+		_, _, err := unpackColumn("test_unsupported", []byte{1, 2, 3})
 		if err != nil {
 			t.Error("unexpected error for unsupported type")
 		}
@@ -410,7 +409,7 @@ func TestUnpackColumn(t *testing.T) {
 	})
 
 	t.Run("Empty slices", func(t *testing.T) {
-		field, arr, err := unpackColumm("empty_int", []int{})
+		field, arr, err := unpackColumn("empty_int", []int{})
 		if err != nil {
 			t.Fatalf("unpackColumm failed for empty slice: %v", err)
 		}
@@ -664,7 +663,7 @@ func TestSchemaFieldTypes(t *testing.T) {
 	}
 }
 
-func TestPrunceSchema(t *testing.T) {
+func TestPruneSchema(t *testing.T) {
 	names, columns := generateTestColumns()
 
 	t.Run("Select subset of fields", func(t *testing.T) {
@@ -888,9 +887,9 @@ func TestNext(t *testing.T) {
 		if err != nil {
 			t.Error("unexpected error when pruning columns")
 		}
-		fmt.Printf("updated: %s\n", proj.schema)
-		fmt.Printf("new Mapping: %v\n", proj.fieldToColIDx)
-		fmt.Printf("new columns: %v\n", proj.columns)
+		t.Logf("updated: %s\n", proj.schema)
+		t.Logf("new Mapping: %v\n", proj.fieldToColIDx)
+		t.Logf("new columns: %v\n", proj.columns)
 
 		totalRows := 0
 		for {
@@ -901,8 +900,8 @@ func TestNext(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Next failed: %v", err)
 			}
-			fmt.Printf("Batche schema: %v\n", batch.Schema)
-			fmt.Printf("Batch data: %v\n", batch.Columns)
+			t.Logf("Batche schema: %v\n", batch.Schema)
+			t.Logf("Batch data: %v\n", batch.Columns)
 
 			// Verify only 1 column
 			if len(batch.Columns) != 1 {

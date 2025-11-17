@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -14,8 +13,6 @@ import (
 
 const csvFilePath = "../../../test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv"
 
-//const csvFilePathLarger = "../../../../test_data/csv/stats.csv"
-
 func getTestFile() *os.File {
 	v, err := os.Open(csvFilePath)
 	if err != nil {
@@ -24,15 +21,6 @@ func getTestFile() *os.File {
 	return v
 }
 
-/*
-	func getTestFile2() *os.File {
-		v, err := os.Open(csvFilePathLarger)
-		if err != nil {
-			panic(err)
-		}
-		return v
-	}
-*/
 func TestCsvInit(t *testing.T) {
 	v := getTestFile()
 	defer func() {
@@ -44,8 +32,8 @@ func TestCsvInit(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create ProjectCSVLeaf: %v", err)
 	}
-	fmt.Printf("schema -> %v\n", p.schema)
-	fmt.Printf("columns Mapping -> %v\n", p.colPosition)
+	t.Logf("schema -> %v\n", p.schema)
+	t.Logf("columns Mapping -> %v\n", p.colPosition)
 }
 func TestProjectComponents(t *testing.T) {
 	v := getTestFile()
@@ -81,7 +69,7 @@ func TestCsvNext(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read next batch from CSV: %v", err)
 	}
-	fmt.Printf("Batch: %v\n", rBatch)
+	t.Logf("Batch: %v\n", rBatch)
 }
 
 // TestParseDataType tests every branch of the parseDataType function
@@ -425,7 +413,7 @@ func TestNextFunction(t *testing.T) {
 				t.Errorf("Column %d: expected 3 rows, got %d", i, col.Len())
 			}
 		}
-		fmt.Printf("col0: %v\n", batch.Columns[0])
+		t.Logf("col0: %v\n", batch.Columns[0])
 		// Check Int64 column (id)
 		idCol, ok := batch.Columns[0].(*array.Int64)
 		if !ok {
@@ -580,7 +568,7 @@ false
 		if !ok {
 			t.Fatalf("Expected *array.Boolean, got %T", batch.Columns[0])
 		}
-		fmt.Printf("flagCol : %v\n", flagCol)
+		t.Logf("flagCol : %v\n", flagCol)
 
 		if !flagCol.IsNull(1) {
 			t.Error("Expected NULL values in flag column")
@@ -967,29 +955,3 @@ func TestProccessFirstLine(t *testing.T) {
 	}
 
 }
-
-/*
-func TestLargercsvFile(t *testing.T) {
-	f1 := getTestFile2()
-
-	project, err := NewProjectCSVLeaf(f1)
-	if err != nil {
-		t.Fatalf("NewProjectCSVLeaf failed: %v", err)
-	}
-	defer func() {
-		if err := f1.Close(); err != nil {
-			t.Fatalf("failed to close: %v", err)
-		}
-	}()
-	for {
-		rc, err := project.Next(1024 * 8)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("Next failed: %v", err)
-		}
-		fmt.Printf("rc : %v\n", rc.Columns)
-	}
-}
-*/

@@ -12,13 +12,6 @@ import (
 
 var secretes = config.GetConfig().Secretes
 
-type mime string
-
-var (
-	MimeCSV     mime = "csv"
-	MimeParquet mime = "parquet"
-)
-
 type NetworkResource struct {
 	client *minio.Client
 	bucket string

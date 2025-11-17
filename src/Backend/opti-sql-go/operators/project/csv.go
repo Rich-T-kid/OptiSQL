@@ -17,8 +17,6 @@ var (
 	_ = (operators.Operator)(&CSVSource{})
 )
 
-// TODO: change the leaf stuff to be called scans instead
-
 type CSVSource struct {
 	r            *csv.Reader
 	schema       *arrow.Schema // columns to project as well as types to cast to
@@ -52,7 +50,6 @@ func (csvS *CSVSource) Next(n uint16) (*operators.RecordBatch, error) {
 
 	// Process stored first row (from parseHeader) ---
 	if csvS.firstDataRow != nil && rowsRead < n {
-		fmt.Printf("First row: %v\n", csvS.firstDataRow)
 		if err := csvS.processRow(csvS.firstDataRow, builders); err != nil {
 			return nil, err
 		}
@@ -86,8 +83,9 @@ func (csvS *CSVSource) Next(n uint16) (*operators.RecordBatch, error) {
 	columns := csvS.finalizeBuilders(builders)
 
 	return &operators.RecordBatch{
-		Schema:  csvS.schema,
-		Columns: columns,
+		Schema:   csvS.schema,
+		Columns:  columns,
+		RowCount: uint64(rowsRead),
 	}, nil
 }
 func (csvS *CSVSource) Close() error {
@@ -124,16 +122,26 @@ func (csvS *CSVSource) processRow(
 			if cell == "" || cell == "NULL" {
 				b.AppendNull()
 			} else {
-				v, _ := strconv.ParseInt(cell, 10, 64)
-				b.Append(v)
+				v, err := strconv.ParseInt(cell, 10, 64)
+				if err != nil {
+					fmt.Printf("failed to parse cell: %v with error: %v\n", cell, err)
+					b.AppendNull()
+				} else {
+					b.Append(v)
+				}
 			}
 
 		case *array.Float64Builder:
 			if cell == "" || cell == "NULL" {
 				b.AppendNull()
 			} else {
-				v, _ := strconv.ParseFloat(cell, 64)
-				b.Append(v)
+				v, err := strconv.ParseFloat(cell, 64)
+				if err != nil {
+					fmt.Printf("failed to parse cell: %v with error: %v\n", cell, err)
+					b.AppendNull()
+				} else {
+					b.Append(v)
+				}
 			}
 
 		case *array.StringBuilder:

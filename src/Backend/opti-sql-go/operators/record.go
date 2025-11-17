@@ -18,13 +18,13 @@ var (
 type Operator interface {
 	Next(uint16) (*RecordBatch, error)
 	Schema() *arrow.Schema
-	// Call Operator.Close() after Next retruns an io.EOF to clean up resources
+	// Call Operator.Close() after Next returns an io.EOF to clean up resources
 	Close() error
 }
 type RecordBatch struct {
 	Schema   *arrow.Schema
 	Columns  []arrow.Array
-	RowCount uint64 // TODO: update to actaully use this, in all operators
+	RowCount uint64 // TODO: update to actually use this, in all operators
 }
 
 type SchemaBuilder struct {

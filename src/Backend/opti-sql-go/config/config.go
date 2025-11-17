@@ -33,9 +33,8 @@ type batchConfig struct {
 	EnableParallelRead   bool   `yaml:"enable_parallel_read"`
 	MaxMemoryBeforeSpill uint64 `yaml:"max_memory_before_spill"`
 	MaxFileSizeMB        int    `yaml:"max_file_size_mb"` // max size of a single file
-	// TODO: add test for these two fileds, just add to existing test
-	ShouldDowndload   bool `yaml:"should_download"`
-	MaxDownloadSizeMB int  `yaml:"max_download_size_mb"` // max size to download from external sources like S3
+	ShouldDownload       bool   `yaml:"should_download"`
+	MaxDownloadSizeMB    int    `yaml:"max_download_size_mb"` // max size to download from external sources like S3
 }
 type queryConfig struct {
 	// should results be cached, server side? if so how long
@@ -76,7 +75,7 @@ var configInstance *Config = &Config{
 		MaxFileSizeMB:        500,                  // 500MB
 		// should we download files from external sources like S3
 		// if so whats the max size to download, if its greater than dont download the file locally
-		ShouldDowndload:   true,
+		ShouldDownload:    true,
 		MaxDownloadSizeMB: 10, // 10MB
 	},
 	Query: queryConfig{
@@ -160,7 +159,7 @@ func mergeConfig(dst *Config, src map[string]interface{}) {
 			dst.Batch.MaxFileSizeMB = v
 		}
 		if v, ok := batch["should_download"].(bool); ok {
-			dst.Batch.ShouldDowndload = v
+			dst.Batch.ShouldDownload = v
 		}
 		if v, ok := batch["max_download_size_mb"].(int); ok {
 			dst.Batch.MaxDownloadSizeMB = v

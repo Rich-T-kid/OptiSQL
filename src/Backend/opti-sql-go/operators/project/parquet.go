@@ -40,7 +40,6 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 	defer func() {
 		if err := filerReader.Close(); err != nil {
 			fmt.Printf("warning: failed to close parquet reader: %v\n", err)
-
 		}
 	}()
 
@@ -131,16 +130,10 @@ func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 		numCols := int(record.NumCols())
 		numRows := int(record.NumRows())
 
-		fmt.Printf("numCols=%d numRows=%d columns=%v\n",
-			numCols, numRows, record.Columns(),
-		)
 		for colIdx := 0; colIdx < numCols; colIdx++ {
 
 			batchCol := record.Column(colIdx)
 			existing := columns[colIdx]
-			fmt.Printf("columns:%v\n", columns)
-			fmt.Printf("existing:%v\n", existing)
-			fmt.Printf("batchCol:%v\n", batchCol)
 			// First time seeing this column → just assign it
 			if existing == nil {
 				batchCol.Retain()

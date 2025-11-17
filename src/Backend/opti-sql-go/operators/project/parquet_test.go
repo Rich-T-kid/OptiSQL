@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -13,7 +12,7 @@ import (
 
 const ParquetTestDatafile = "../../../test_data/parquet/capitals_clean.parquet"
 
-func getTestParuqetFile() *os.File {
+func getTestParquetFile() *os.File {
 	file, err := os.Open(ParquetTestDatafile)
 	if err != nil {
 		panic(err)
@@ -57,7 +56,7 @@ func sameStringSlice(a, b []string) bool {
 }
 func TestParquetInit(t *testing.T) {
 	t.Run("Test No names pass in", func(t *testing.T) {
-		f := getTestParuqetFile()
+		f := getTestParquetFile()
 
 		_, err := NewParquetSourcePushDown(f, []string{}, nil)
 		if err == nil {
@@ -66,7 +65,7 @@ func TestParquetInit(t *testing.T) {
 	})
 
 	t.Run("Test invalid names are passed in", func(t *testing.T) {
-		f := getTestParuqetFile()
+		f := getTestParquetFile()
 		_, err := NewParquetSourcePushDown(f, []string{"non_existent_column"}, nil)
 		if err == nil {
 			t.Errorf("Expected error when invalid column names are passed in, but got nil")
@@ -74,7 +73,7 @@ func TestParquetInit(t *testing.T) {
 	})
 
 	t.Run("Test correct schema is returned", func(t *testing.T) {
-		f := getTestParuqetFile()
+		f := getTestParquetFile()
 		columns := []string{"country", "capital", "lat"}
 		source, err := NewParquetSourcePushDown(f, columns, nil)
 		if err != nil {
@@ -93,7 +92,7 @@ func TestParquetInit(t *testing.T) {
 	})
 
 	t.Run("Test input columns and filters were passed back out", func(t *testing.T) {
-		f := getTestParuqetFile()
+		f := getTestParquetFile()
 		columns := []string{"country", "capital", "lat"}
 		source, err := NewParquetSourcePushDown(f, columns, nil)
 		if err != nil {
@@ -109,7 +108,7 @@ func TestParquetInit(t *testing.T) {
 
 	t.Run("Check reader isnt null", func(t *testing.T) {
 
-		f := getTestParuqetFile()
+		f := getTestParquetFile()
 		columns := []string{"country", "capital", "lat"}
 		source, err := NewParquetSourcePushDown(f, columns, nil)
 		if err != nil {
@@ -123,7 +122,7 @@ func TestParquetInit(t *testing.T) {
 
 }
 func TestParquetClose(t *testing.T) {
-	f := getTestParuqetFile()
+	f := getTestParquetFile()
 	columns := []string{"country", "capital", "lat"}
 	source, err := NewParquetSourcePushDown(f, columns, nil)
 	if err != nil {
@@ -143,7 +142,7 @@ func TestParquetClose(t *testing.T) {
 
 }
 func TestRunToEnd(t *testing.T) {
-	f := getTestParuqetFile()
+	f := getTestParquetFile()
 	columns := []string{"country", "capital", "lat"}
 	source, err := NewParquetSourcePushDown(f, columns, nil)
 	if err != nil {
@@ -162,7 +161,7 @@ func TestRunToEnd(t *testing.T) {
 }
 
 func TestParquetRead(t *testing.T) {
-	f := getTestParuqetFile()
+	f := getTestParquetFile()
 	columns := []string{"country", "capital", "lat"}
 	source, err := NewParquetSourcePushDown(f, columns, nil)
 	if err != nil {
@@ -182,8 +181,8 @@ func TestParquetRead(t *testing.T) {
 	if rc.Schema.NumFields() != len(columns) {
 		t.Errorf("Expected schema to have %d fields, got %d", len(columns), rc.Schema.NumFields())
 	}
-	fmt.Printf("columns:%v\n", rc.Columns)
-	fmt.Printf("count:%d\n", rc.RowCount)
+	t.Logf("columns:%v\n", rc.Columns)
+	t.Logf("count:%d\n", rc.RowCount)
 }
 
 // CombineArray tests: cover primitive, uint, float, bool, string, binary and nil-handling

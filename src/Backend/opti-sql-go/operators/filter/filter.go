@@ -5,7 +5,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 )
 
-// FilterExpr takes in a field and column and yeildss a function that takes in an index and returns a bool indicating whether the row at that index satisfies the filter condition.
+// FilterExpr takes in a field and column and yeilds a function that takes in an index and returns a bool indicating whether the row at that index satisfies the filter condition.
 type FilterExpr func(filed arrow.Field, col arrow.Array) func(i int) bool
 
 // example

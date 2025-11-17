@@ -44,7 +44,7 @@ func NewInMemoryProjectExec(names []string, columns []any) (*InMemorySource, err
 		if !supportedType(col) {
 			return nil, operators.ErrInvalidSchema(fmt.Sprintf("unsupported column type for column %s", names[i]))
 		}
-		field, arr, err := unpackColumm(names[i], col)
+		field, arr, err := unpackColumn(names[i], col)
 		if err != nil {
 			return nil, ErrInvalidInMemoryDataType(col)
 		}
@@ -74,7 +74,7 @@ func (ms *InMemorySource) withFields(names ...string) error {
 	return nil
 }
 func (ms *InMemorySource) Next(n uint16) (*operators.RecordBatch, error) {
-	if ms.pos >= uint16(ms.columns[0].Len()) {
+	if len(ms.columns) == 0 || ms.pos >= uint16(ms.columns[0].Len()) {
 		return nil, io.EOF // EOF
 	}
 	var currRows uint16 = 0
@@ -95,8 +95,9 @@ func (ms *InMemorySource) Next(n uint16) (*operators.RecordBatch, error) {
 	ms.pos += currRows
 
 	return &operators.RecordBatch{
-		Schema:  ms.schema,
-		Columns: outPutCols,
+		Schema:   ms.schema,
+		Columns:  outPutCols,
+		RowCount: uint64(currRows),
 	}, nil
 }
 func (ms *InMemorySource) Close() error {
@@ -108,11 +109,11 @@ func (ms *InMemorySource) Close() error {
 func (ms *InMemorySource) Schema() *arrow.Schema {
 	return ms.schema
 }
-func unpackColumm(name string, col any) (arrow.Field, arrow.Array, error) {
+func unpackColumn(name string, col any) (arrow.Field, arrow.Array, error) {
 	// need to not only build the array; but also need the schema
 	var field arrow.Field
 	field.Name = name
-	field.Nullable = true // default to nullable for now
+	field.Nullable = true // default to nullable
 	switch colType := col.(type) {
 	case []int:
 		field.Type = arrow.PrimitiveTypes.Int64
@@ -124,14 +125,12 @@ func unpackColumm(name string, col any) (arrow.Field, arrow.Array, error) {
 		}
 		return field, b.NewArray(), nil
 	case []int8:
-		// build int8 array
 		field.Type = arrow.PrimitiveTypes.Int8
 		data := colType
 		b := array.NewInt8Builder(memory.DefaultAllocator)
 		defer b.Release()
 		b.AppendValues(data, nil)
 		return field, b.NewArray(), nil
-		// build int8 array
 	case []int16:
 		field.Type = arrow.PrimitiveTypes.Int16
 		data := colType
@@ -212,7 +211,6 @@ func unpackColumm(name string, col any) (arrow.Field, arrow.Array, error) {
 		defer b.Release()
 		b.AppendValues(data, nil)
 		return field, b.NewArray(), nil
-		// build string array
 	case []bool:
 		field.Type = arrow.FixedWidthTypes.Boolean
 		data := colType

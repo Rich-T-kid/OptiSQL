@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -39,7 +38,7 @@ func TestS3BasicRead(t *testing.T) {
 		if n != 1024 {
 			t.Fatalf("expected to read 1024 bytes, but read %d bytes", n)
 		}
-		fmt.Printf("returned contents %s\n", firstKB[:n])
+		t.Logf("returned contents %s\n", firstKB[:n])
 
 	})
 	t.Run("parquet read", func(t *testing.T) {
@@ -55,7 +54,7 @@ func TestS3BasicRead(t *testing.T) {
 		if n != 1024 {
 			t.Fatalf("expected to read 1024 bytes, but read %d bytes", n)
 		}
-		fmt.Printf("returned contents %v\n", firstKB[:n])
+		t.Logf("returned contents %v\n", firstKB[:n])
 
 	})
 	t.Run("txt read", func(t *testing.T) {
@@ -71,7 +70,7 @@ func TestS3BasicRead(t *testing.T) {
 		if n != 1024 {
 			t.Fatalf("expected to read 1024 bytes, but read %d bytes", n)
 		}
-		fmt.Printf("returned contents %s\n", firstKB[:n])
+		t.Logf("returned contents %s\n", firstKB[:n])
 
 	})
 }
@@ -194,7 +193,7 @@ func TestS3ForSource(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read record batch from s3 csv source: %v", err)
 		}
-		fmt.Printf("returned record batch from s3 csv source: %v\n", rc)
+		t.Logf("returned record batch from s3 csv source: %v\n", rc)
 
 	})
 	t.Run("parquet from s3 source", func(t *testing.T) {
@@ -210,7 +209,7 @@ func TestS3ForSource(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read record batch from s3 csv source: %v", err)
 		}
-		fmt.Printf("returned record batch from s3 csv source: %v\n", rc)
+		t.Logf("returned record batch from s3 csv source: %v\n", rc)
 
 	})
 	t.Run("csv from s3 source then downloaded", func(t *testing.T) {
@@ -223,7 +222,7 @@ func TestS3ForSource(t *testing.T) {
 			t.Fatalf("failed to download s3 object locally: %v", err)
 		}
 		defer func() {
-			fmt.Println("deleting downloaded file...")
+			t.Log("deleting downloaded file...")
 			_ = f.Close()
 			if err := os.Remove(f.Name()); err != nil {
 				t.Fatalf("error closing file %v", f.Name())
@@ -241,7 +240,7 @@ func TestS3ForSource(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to close csv project source: %v", err)
 		}
-		fmt.Printf("returned record batch from s3 csv source: %v\n", rc)
+		t.Logf("returned record batch from s3 csv source: %v\n", rc)
 
 	})
 	t.Run("parquet from s3 source then downloaded", func(t *testing.T) {
@@ -254,7 +253,7 @@ func TestS3ForSource(t *testing.T) {
 			t.Fatalf("failed to download s3 object locally: %v", err)
 		}
 		defer func() {
-			fmt.Println("deleting downloaded file...")
+			t.Log("deleting downloaded file...")
 			_ = f.Close()
 			if err := os.Remove(f.Name()); err != nil {
 				t.Fatalf("error closing file %v", f.Name())
@@ -268,7 +267,7 @@ func TestS3ForSource(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read record batch from s3 csv source: %v", err)
 		}
-		fmt.Printf("returned record batch from s3 csv source: %v\n", rc)
+		t.Logf("returned record batch from s3 csv source: %v\n", rc)
 
 	})
 }
@@ -300,6 +299,6 @@ func TestS3Source(t *testing.T) {
 		if n == 0 {
 			t.Fatalf("expected to read some bytes from s3 object stream, but read 0 bytes")
 		}
-		fmt.Printf("read %d bytes from s3 object stream: %s\n", n, string(buf[:n]))
+		t.Logf("read %d bytes from s3 object stream: %s\n", n, string(buf[:n]))
 	})
 }

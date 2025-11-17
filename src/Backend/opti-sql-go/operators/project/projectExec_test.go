@@ -2,7 +2,6 @@ package project
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"testing"
 
@@ -37,7 +36,7 @@ func TestProjectPrune(t *testing.T) {
 				t.Fatalf("expected field %s, got %s", keepCols[i], field.Name)
 			}
 		}
-		fmt.Printf("%s\n", newSchema)
+		t.Logf("%s\n", newSchema)
 	})
 	t.Run("validate prune 2", func(t *testing.T) {
 		keeptCols := []string{"age", "country", "signup_date"}
@@ -53,7 +52,7 @@ func TestProjectPrune(t *testing.T) {
 				t.Fatalf("expected field %s, got %s", keeptCols[i], field.Name)
 			}
 		}
-		fmt.Printf("%s\n", newSchema)
+		t.Logf("%s\n", newSchema)
 
 	})
 	t.Run("prune non-existant column", func(t *testing.T) {
@@ -85,7 +84,7 @@ func TestProjectExec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create in memory source: %v", err)
 	}
-	fmt.Printf("original schema %v\n", memorySource.Schema())
+	t.Logf("original schema %v\n", memorySource.Schema())
 	projectExec, err := NewProjectExec([]string{"id", "name", "age"}, memorySource)
 	if err != nil {
 		t.Fatalf("failed to create project exec: %v", err)
@@ -94,7 +93,7 @@ func TestProjectExec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get next record batch: %v", err)
 	}
-	fmt.Printf("rc:%v\n", rc)
+	t.Logf("rc:%v\n", rc)
 
 }
 
