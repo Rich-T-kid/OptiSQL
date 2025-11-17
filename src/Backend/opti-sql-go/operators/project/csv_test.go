@@ -1,4 +1,4 @@
-package source
+package project
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
-const csvFilePath = "../../../../test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv"
+const csvFilePath = "../../../test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv"
 
 //const csvFilePathLarger = "../../../../test_data/csv/stats.csv"
 

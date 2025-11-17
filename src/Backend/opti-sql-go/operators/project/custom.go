@@ -1,14 +1,17 @@
-package source
+package project
 
 import (
 	"fmt"
 	"io"
 	"opti-sql-go/operators"
-	"opti-sql-go/operators/project"
 
 	"github.com/apache/arrow/go/v15/arrow/memory"
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
+)
+
+var (
+	_ = (operators.Operator)(&InMemorySource{})
 )
 
 // in memory format just for the ease of testing
@@ -25,7 +28,7 @@ var (
 type InMemorySource struct {
 	schema        *arrow.Schema
 	columns       []arrow.Array
-	pos           uint64
+	pos           uint16
 	fieldToColIDx map[string]int
 }
 
@@ -57,7 +60,7 @@ func NewInMemoryProjectExec(names []string, columns []any) (*InMemorySource, err
 }
 func (ms *InMemorySource) withFields(names ...string) error {
 
-	newSchema, cols, err := project.ProjectSchemaFilterDown(ms.schema, ms.columns, names...)
+	newSchema, cols, err := ProjectSchemaFilterDown(ms.schema, ms.columns, names...)
 	if err != nil {
 		return err
 	}
@@ -70,16 +73,16 @@ func (ms *InMemorySource) withFields(names ...string) error {
 	ms.columns = cols
 	return nil
 }
-func (ms *InMemorySource) Next(n uint64) (*operators.RecordBatch, error) {
-	if ms.pos >= uint64(ms.columns[0].Len()) {
+func (ms *InMemorySource) Next(n uint16) (*operators.RecordBatch, error) {
+	if ms.pos >= uint16(ms.columns[0].Len()) {
 		return nil, io.EOF // EOF
 	}
-	var currRows uint64 = 0
+	var currRows uint16 = 0
 	outPutCols := make([]arrow.Array, len(ms.schema.Fields()))
 
 	for i, field := range ms.schema.Fields() {
 		col := ms.columns[ms.fieldToColIDx[field.Name]]
-		colLen := uint64(col.Len())
+		colLen := uint16(col.Len())
 		remaining := colLen - ms.pos
 		toRead := n
 		if remaining < n {
@@ -95,6 +98,15 @@ func (ms *InMemorySource) Next(n uint64) (*operators.RecordBatch, error) {
 		Schema:  ms.schema,
 		Columns: outPutCols,
 	}, nil
+}
+func (ms *InMemorySource) Close() error {
+	for _, c := range ms.columns {
+		c.Release()
+	}
+	return nil
+}
+func (ms *InMemorySource) Schema() *arrow.Schema {
+	return ms.schema
 }
 func unpackColumm(name string, col any) (arrow.Field, arrow.Array, error) {
 	// need to not only build the array; but also need the schema

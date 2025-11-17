@@ -1,4 +1,4 @@
-package source
+package project
 
 import (
 	"context"
@@ -16,9 +16,13 @@ import (
 	"github.com/apache/arrow/go/v17/parquet/pqarrow"
 )
 
+var (
+	_ = (operators.Operator)(&ParquetSource{})
+)
+
 type ParquetSource struct {
 	// existing fields
-	Schema             *arrow.Schema
+	schema             *arrow.Schema
 	projectionPushDown []string            // columns to project up
 	predicatePushDown  []filter.FilterExpr // simple predicate push down for now
 	reader             pqarrow.RecordReader
@@ -54,7 +58,7 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 	}
 
 	return &ParquetSource{
-		Schema:             rdr.Schema(),
+		schema:             rdr.Schema(),
 		projectionPushDown: []string{},
 		predicatePushDown:  nil,
 		reader:             rdr,
@@ -104,7 +108,7 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string, filter
 	}
 
 	return &ParquetSource{
-		Schema:             rdr.Schema(),
+		schema:             rdr.Schema(),
 		projectionPushDown: columns,
 		predicatePushDown:  filters,
 		reader:             rdr,
@@ -116,7 +120,7 @@ func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 	if ps.reader == nil || ps.done || !ps.reader.Next() {
 		return nil, io.EOF
 	}
-	columns := make([]arrow.Array, len(ps.Schema.Fields()))
+	columns := make([]arrow.Array, len(ps.schema.Fields()))
 	curRow := 0
 	for curRow < int(n) && ps.reader.Next() {
 		err := ps.reader.Err()
@@ -159,7 +163,7 @@ func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 		curRow += numRows
 	}
 	return &operators.RecordBatch{
-		Schema:   ps.Schema, // Remove the pointer as ps.Schema is already of type arrow.Schema
+		Schema:   ps.schema, // Remove the pointer as ps.Schema is already of type arrow.Schema
 		Columns:  columns,
 		RowCount: uint64(curRow),
 	}, nil
@@ -168,6 +172,9 @@ func (ps *ParquetSource) Close() error {
 	ps.reader.Release()
 	ps.reader = nil
 	return nil
+}
+func (ps *ParquetSource) Schema() *arrow.Schema {
+	return ps.schema
 }
 
 // append arr2 to arr1 so (arr1 + arr2) = arr1-arr2

@@ -1,4 +1,4 @@
-package source
+package project
 
 import (
 	"encoding/csv"
@@ -11,6 +11,10 @@ import (
 	"github.com/apache/arrow/go/v15/arrow/memory"
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
+)
+
+var (
+	_ = (operators.Operator)(&CSVSource{})
 )
 
 // TODO: change the leaf stuff to be called scans instead
@@ -36,7 +40,7 @@ func NewProjectCSVLeaf(source io.Reader) (*CSVSource, error) {
 	return proj, err
 }
 
-func (csvS *CSVSource) Next(n uint64) (*operators.RecordBatch, error) {
+func (csvS *CSVSource) Next(n uint16) (*operators.RecordBatch, error) {
 	if csvS.done {
 		return nil, io.EOF
 	}
@@ -44,7 +48,7 @@ func (csvS *CSVSource) Next(n uint64) (*operators.RecordBatch, error) {
 	// 1. Create builders
 	builders := csvS.initBuilders()
 
-	rowsRead := uint64(0)
+	rowsRead := uint16(0)
 
 	// Process stored first row (from parseHeader) ---
 	if csvS.firstDataRow != nil && rowsRead < n {
@@ -92,6 +96,9 @@ func (csvS *CSVSource) Close() error {
 	return nil
 }
 
+func (csvS *CSVSource) Schema() *arrow.Schema {
+	return csvS.schema
+}
 func (csvS *CSVSource) initBuilders() []array.Builder {
 	fields := csvS.schema.Fields()
 	builders := make([]array.Builder, len(fields))

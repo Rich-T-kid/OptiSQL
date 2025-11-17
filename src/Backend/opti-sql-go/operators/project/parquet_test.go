@@ -1,4 +1,4 @@
-package source
+package project
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
-const ParquetTestDatafile = "../../../../test_data/parquet/capitals_clean.parquet"
+const ParquetTestDatafile = "../../../test_data/parquet/capitals_clean.parquet"
 
 func getTestParuqetFile() *os.File {
 	file, err := os.Open(ParquetTestDatafile)
@@ -80,7 +80,7 @@ func TestParquetInit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-		schema := source.Schema
+		schema := source.Schema()
 		if len(schema.Fields()) != len(columns) {
 			t.Errorf("Expected schema to have %d fields, got %d", len(columns), len(schema.Fields()))
 		}

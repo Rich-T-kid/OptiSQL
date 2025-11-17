@@ -17,6 +17,7 @@ var (
 
 type Operator interface {
 	Next(uint16) (*RecordBatch, error)
+	Schema() *arrow.Schema
 	// Call Operator.Close() after Next retruns an io.EOF to clean up resources
 	Close() error
 }
