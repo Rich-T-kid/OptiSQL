@@ -16,10 +16,11 @@ var (
 )
 
 type Config struct {
-	Server  serverConfig  `yaml:"server"`
-	Batch   batchConfig   `yaml:"batch"`
-	Query   queryConfig   `yaml:"query"`
-	Metrics metricsConfig `yaml:"metrics"`
+	Server   serverConfig   `yaml:"server"`
+	Batch    batchConfig    `yaml:"batch"`
+	Query    queryConfig    `yaml:"query"`
+	Metrics  metricsConfig  `yaml:"metrics"`
+	Secretes secretesConfig // do not read these from yaml
 }
 type serverConfig struct {
 	Port             int    `yaml:"port"`
@@ -32,6 +33,8 @@ type batchConfig struct {
 	EnableParallelRead   bool   `yaml:"enable_parallel_read"`
 	MaxMemoryBeforeSpill uint64 `yaml:"max_memory_before_spill"`
 	MaxFileSizeMB        int    `yaml:"max_file_size_mb"` // max size of a single file
+	ShouldDownload       bool   `yaml:"should_download"`
+	MaxDownloadSizeMB    int    `yaml:"max_download_size_mb"` // max size to download from external sources like S3
 }
 type queryConfig struct {
 	// should results be cached, server side? if so how long
@@ -51,6 +54,12 @@ type metricsConfig struct {
 	// memory usage over time
 	EnableMemoryStats bool `yaml:"enable_memory_stats"`
 }
+type secretesConfig struct {
+	AccessKey   string `yaml:"access_key"`
+	SecretKey   string `yaml:"secret_key"`
+	EndpointURL string `yaml:"endpoint_url"`
+	BucketName  string `yaml:"bucket_name"`
+}
 
 var configInstance *Config = &Config{
 	Server: serverConfig{
@@ -64,6 +73,10 @@ var configInstance *Config = &Config{
 		EnableParallelRead:   true,
 		MaxMemoryBeforeSpill: uint64(gigaByte) * 2, // 2GB
 		MaxFileSizeMB:        500,                  // 500MB
+		// should we download files from external sources like S3
+		// if so whats the max size to download, if its greater than dont download the file locally
+		ShouldDownload:    true,
+		MaxDownloadSizeMB: 10, // 10MB
 	},
 	Query: queryConfig{
 		EnableCache:               true,
@@ -78,6 +91,13 @@ var configInstance *Config = &Config{
 		ExportIntervalSecs: 60, // 1 minute
 		EnableQueryStats:   true,
 		EnableMemoryStats:  true,
+	},
+	// TODO: remove hardcoded secretes before production. we are just testing for now
+	Secretes: secretesConfig{
+		AccessKey:   "DO8013ZT6VDHJ2EM94RN",
+		SecretKey:   "kPvQSMt6naiwe/FhDnzXpYmVE5yzJUsIR0/OJpsUNzo",
+		EndpointURL: "atl1.digitaloceanspaces.com",
+		BucketName:  "test-bucket-pull-down",
 	},
 }
 
@@ -137,6 +157,12 @@ func mergeConfig(dst *Config, src map[string]interface{}) {
 		}
 		if v, ok := batch["max_file_size_mb"].(int); ok {
 			dst.Batch.MaxFileSizeMB = v
+		}
+		if v, ok := batch["should_download"].(bool); ok {
+			dst.Batch.ShouldDownload = v
+		}
+		if v, ok := batch["max_download_size_mb"].(int); ok {
+			dst.Batch.MaxDownloadSizeMB = v
 		}
 	}
 
