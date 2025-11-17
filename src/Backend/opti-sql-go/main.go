@@ -6,6 +6,8 @@ import (
 	"os"
 )
 
+// TODO: in the project operators make sure the record batches account for the RowCount field properly.
+
 func main() {
 	if len(os.Args) > 1 {
 		if err := config.Decode(os.Args[1]); err != nil {
