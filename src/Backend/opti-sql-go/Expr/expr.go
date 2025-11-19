@@ -67,7 +67,6 @@ var (
 	_ = (Expression)(&CastExpr{})
 )
 
-// TODO: create nice wrapper functions for creating expressions
 /*
 Eval(expr):
 
@@ -224,7 +223,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 	// INT / UINT (8/16/32/64)
 	// ------------------------------
 	case arrow.INT8:
-		v := int8(l.Value.(int8))
+		v := l.Value.(int8)
 
 		b := array.NewInt8Builder(memory.DefaultAllocator)
 		defer b.Release()
@@ -244,7 +243,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 		return b.NewArray(), nil
 
 	case arrow.INT16:
-		v := int16(l.Value.(int16))
+		v := l.Value.(int16)
 		b := array.NewInt16Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -253,7 +252,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 		return b.NewArray(), nil
 
 	case arrow.UINT16:
-		v := uint16(l.Value.(uint16))
+		v := l.Value.(uint16)
 		b := array.NewUint16Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -262,7 +261,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 		return b.NewArray(), nil
 
 	case arrow.INT32:
-		v := int32(l.Value.(int32))
+		v := l.Value.(int32)
 		b := array.NewInt32Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -271,16 +270,15 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 		return b.NewArray(), nil
 
 	case arrow.UINT32:
-		v := uint32(l.Value.(uint32))
+		v := l.Value.(uint32)
 		b := array.NewUint32Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
 			b.Append(v)
 		}
 		return b.NewArray(), nil
-		// correct jump
 	case arrow.INT64:
-		v := int64(l.Value.(int64))
+		v := l.Value.(int64)
 		b := array.NewInt64Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -289,7 +287,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 		return b.NewArray(), nil
 
 	case arrow.UINT64:
-		v := uint64(l.Value.(uint64))
+		v := l.Value.(uint64)
 		b := array.NewUint64Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -301,7 +299,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 	// FLOATS
 	// ------------------------------
 	case arrow.FLOAT32:
-		v := float32(l.Value.(float32))
+		v := l.Value.(float32)
 		b := array.NewFloat32Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -310,7 +308,7 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 		return b.NewArray(), nil
 
 	case arrow.FLOAT64:
-		v := float64(l.Value.(float64))
+		v := l.Value.(float64)
 		b := array.NewFloat64Builder(memory.DefaultAllocator)
 		defer b.Release()
 		for i := 0; i < n; i++ {
@@ -406,15 +404,24 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 
 	// comparisions TODO:
 	case Equal:
+		return nil, fmt.Errorf("operator Equal (%d) not yet implemented", b.Op)
 	case NotEqual:
+		return nil, fmt.Errorf("operator NotEqual (%d) not yet implemented", b.Op)
 	case LessThan:
+		return nil, fmt.Errorf("operator LessThan (%d) not yet implemented", b.Op)
 	case LessThanOrEqual:
+		return nil, fmt.Errorf("operator LessThanOrEqual (%d) not yet implemented", b.Op)
 	case GreaterThan:
+		return nil, fmt.Errorf("operator GreaterThan (%d) not yet implemented", b.Op)
 	case GreaterThanOrEqual:
+		return nil, fmt.Errorf("operator GreaterThanOrEqual (%d) not yet implemented", b.Op)
 	// logical
 	case And:
+		return nil, fmt.Errorf("operator And (%d) not yet implemented", b.Op)
 	case Or:
+		return nil, fmt.Errorf("operator Or (%d) not yet implemented", b.Op)
 	case Not:
+		return nil, fmt.Errorf("operator Not (%d) not yet implemented", b.Op)
 	}
 	return nil, fmt.Errorf("binary operator %d not supported", b.Op)
 }
@@ -555,12 +562,6 @@ func inferScalarFunctionType(fn supportedFunctions, argType arrow.DataType) arro
 	default:
 		panic(fmt.Sprintf("unknown scalar function %v", fn))
 	}
-}
-
-// not a priority at all
-type AggregateFunction struct {
-	Function aggFunctions
-	Args     Expression
 }
 
 // If cast succeeds → return the casted value

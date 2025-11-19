@@ -47,6 +47,8 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 			}
 		}
 	}
+	// Use a generic column naming pattern ("col_%d") when an expression doesn't have an explicit alias.
+	// This ensures every projected column has a name in the output schema.
 
 	outputschema := arrow.NewSchema(fields, nil)
 	// return new exec
@@ -83,6 +85,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 			return nil, fmt.Errorf("project eval expression failed for expr %d: %w", i, err)
 		}
 		outPutCols[i] = arr
+		arr.Retain()
 	}
 	for _, c := range childBatch.Columns {
 		c.Release()

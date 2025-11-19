@@ -147,7 +147,7 @@ func TestProjectExec_Literal_sql(t *testing.T) {
 		}
 		column := rc.Columns[0]
 		if column.DataType() != arrow.BinaryTypes.String {
-			t.Fatalf("expected column types to be of type string but recieved %s\n", column.DataType())
+			t.Fatalf("expected column types to be of type string but received %s\n", column.DataType())
 		}
 		if column.ValueStr(0) != "hello" {
 			t.Fatalf("expected hello, got %s", column.ValueStr(0))
@@ -167,7 +167,7 @@ func TestProjectExec_Literal_sql(t *testing.T) {
 		}
 		column := rc.Columns[0]
 		if column.DataType() != arrow.PrimitiveTypes.Float32 {
-			t.Fatalf("expected column types to be of type string but recieved %s\n", column.DataType())
+			t.Fatalf("expected column types to be of type string but received %s\n", column.DataType())
 		}
 		floatArr, ok := column.(*array.Float32)
 		if !ok {
@@ -208,7 +208,7 @@ func TestProjectExec_Literal_Literal(t *testing.T) {
 		}
 		expected := []int64{20, 22, 45, 86}
 		if ageCol.Len() != len(expected) {
-			t.Fatalf("mismatch in expected column length, recieved column of len %d", ageCol.Len())
+			t.Fatalf("mismatch in expected column length, received column of len %d", ageCol.Len())
 		}
 		for i := 0; i < len(expected); i++ {
 			if ageCol.Value(i) != expected[i] {
@@ -700,7 +700,7 @@ func TestProjectExec_AliasExpr(t *testing.T) {
 /*
 function(column/literal)
 function(column |operator| literal)
-function(columh/literal |operator| literal/column)
+function(column/literal |operator| literal/column)
 */
 func TestProjectExec_FunctionExpr(t *testing.T) {
 	names, cols := generateData() // id, name, age, active, score
@@ -838,6 +838,6 @@ func TestProjectExec_FunctionExpr(t *testing.T) {
 /*
 complex expr
 ex: alias(function(column |operator| literal) |operator| literal)
-TODO: not the most imporatnt thing right now since we know basic expression are fine
+TODO: not the most important thing right now since we know basic expression are fine
 */
 func TestProjectExec_ComplexExpr(t *testing.T) {}

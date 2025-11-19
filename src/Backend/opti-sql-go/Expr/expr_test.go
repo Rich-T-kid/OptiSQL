@@ -1192,3 +1192,9 @@ func TestExprInitMethods(t *testing.T) {
 		}
 	})
 }
+
+func TestUnimplemntedOperators(t *testing.T) {
+	for i := Equal; i <= Or; i++ {
+		NewBinaryExpr(NewLiteralResolve(arrow.PrimitiveTypes.Int16, int16(10)), 3, NewLiteralResolve(arrow.PrimitiveTypes.Int16, int16(5)))
+	}
+}
