@@ -1,5 +1,8 @@
 //use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::{arrow::{array::RecordBatch, util::pretty::print_batches}, functions::crypto::basic, prelude::*};
+use datafusion::{
+    arrow::{array::RecordBatch, util::pretty::print_batches},
+    prelude::*,
+};
 use datafusion_substrait::*;
 mod project;
 #[allow(dead_code)]
@@ -7,11 +10,9 @@ mod project;
 async fn main() {
     let mut ctx = SessionContext::new();
 
-    ctx.register_csv(
-        "example",
-        "example.csv",
-        CsvReadOptions::new()
-    ).await.unwrap();
+    ctx.register_csv("example", "example.csv", CsvReadOptions::new())
+        .await
+        .unwrap();
     // basic projections
     //basic_project("Basic column projection",&mut ctx,"select name,salary from example").await;
     //basic_project("reorder and duplicate projection",&mut ctx,"select salary,name,salary as s1 from example").await; // this is an error, expression names must be unique/ must use alias to get around error
@@ -37,29 +38,34 @@ async fn main() {
     // mixed expressions
     //basic_project("mixed expressions",&mut ctx,"SELECT upper(name) AS upper_name, salary * 1.1 AS increased_salary FROM example").await;
     // function calls
-    let (l,r) = basic_project("function call with Abs()",&mut ctx,"SELECT ABS(age) FROM example").await;
+    let (_l, r) = basic_project(
+        "function call with Abs()",
+        &mut ctx,
+        "SELECT ABS(age) FROM example",
+    )
+    .await;
     //println!("Logical Plan:\n{}", l);
-    print_batches(&r).unwrap();ß
+    print_batches(&r).unwrap();
+
     //basic_project("function call Round()",&mut ctx,"SELECT Round(age) FROM example").await;
     //basic_project("function call Length()",&mut ctx,"SELECT LENGTH(name) FROM example").await;
-
 }
 
-pub async fn basic_project(name : &str,ctx : &mut SessionContext,sql : &str) -> (String,Vec<RecordBatch>) {
-    println!("Running project: {}",name);
-    let df1 = ctx.sql(sql)
-        .await
-        .unwrap();
-
+pub async fn basic_project(
+    name: &str,
+    ctx: &mut SessionContext,
+    sql: &str,
+) -> (String, Vec<RecordBatch>) {
+    println!("Running project: {}", name);
+    let df1 = ctx.sql(sql).await.unwrap();
 
     let logical_plan = df1.logical_plan().clone();
-    let substrait_plan = logical_plan::producer::to_substrait_plan(&logical_plan, &ctx.state()).unwrap();
+    let substrait_plan =
+        logical_plan::producer::to_substrait_plan(&logical_plan, &ctx.state()).unwrap();
     print!("Substrait Plan :\n{:?}", substrait_plan);
 
+    let display = format!("{}", logical_plan.display_indent());
 
-    let display = format!("{}",logical_plan.display_indent());
-    
     // Running will create the physical plan automatically
-    return (display,df1.collect().await.unwrap());
-    
+    (display, df1.collect().await.unwrap())
 }
