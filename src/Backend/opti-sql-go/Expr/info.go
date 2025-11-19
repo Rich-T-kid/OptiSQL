@@ -12,6 +12,7 @@ package Expr
 //SELECT salary * 1.2 AS new_salary
 //3.String Expressions
 //first_name || ' ' || last_name
+// 3.1 String functions
 //UPPER(name)
 //LOWER(email)
 //SUBSTRING(name, 1, 3)

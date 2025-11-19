@@ -2,7 +2,9 @@ package project
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -18,23 +20,42 @@ var (
 )
 
 type ProjectExec struct {
-	child         operators.Operator
-	outputschema  arrow.Schema
-	columnsToKeep []string
-	done          bool
+	child        operators.Operator
+	outputschema arrow.Schema
+	expr         []Expr.Expression
+	done         bool
 }
 
 // columns to keep and existing schema
-func NewProjectExec(projectColumns []string, input operators.Operator) (*ProjectExec, error) {
-	newSchema, err := prunedSchema(input.Schema(), projectColumns)
-	if err != nil {
-		return nil, err
+func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*ProjectExec, error) {
+	fields := make([]arrow.Field, len(exprs))
+	for i, e := range exprs {
+		switch ex := e.(type) {
+		case *Expr.Alias:
+			fields[i] = arrow.Field{
+				Name:     ex.Name,
+				Type:     Expr.ExprDataType(ex.Expr, input.Schema()),
+				Nullable: true,
+			}
+		default:
+			name := fmt.Sprintf("col_%d", i)
+			Type := Expr.ExprDataType(e, input.Schema())
+			fields[i] = arrow.Field{
+				Name:     name,
+				Type:     Type,
+				Nullable: true,
+			}
+		}
 	}
+	// Use a generic column naming pattern ("col_%d") when an expression doesn't have an explicit alias.
+	// This ensures every projected column has a name in the output schema.
+
+	outputschema := arrow.NewSchema(fields, nil)
 	// return new exec
 	return &ProjectExec{
-		child:         input,
-		outputschema:  *newSchema,
-		columnsToKeep: projectColumns,
+		child:        input,
+		outputschema: *outputschema,
+		expr:         exprs,
 	}, nil
 }
 
@@ -45,24 +66,34 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 		return nil, io.EOF
 	}
 
-	rc, err := p.child.Next(n)
+	childBatch, err := p.child.Next(n)
 	if err != nil {
 		return nil, err
 	}
-	_, orderCols, err := ProjectSchemaFilterDown(rc.Schema, rc.Columns, p.columnsToKeep...)
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range rc.Columns {
-		c.Release()
-	}
-	if rc.RowCount == 0 {
+	if childBatch.RowCount == 0 {
 		p.done = true
+		return &operators.RecordBatch{
+			Schema:   &p.outputschema,
+			Columns:  []arrow.Array{},
+			RowCount: 0,
+		}, nil
+	}
+	outPutCols := make([]arrow.Array, len(p.expr))
+	for i, e := range p.expr {
+		arr, err := Expr.EvalExpression(e, childBatch)
+		if err != nil {
+			return nil, fmt.Errorf("project eval expression failed for expr %d: %w", i, err)
+		}
+		outPutCols[i] = arr
+		arr.Retain()
+	}
+	for _, c := range childBatch.Columns {
+		c.Release()
 	}
 	return &operators.RecordBatch{
 		Schema:   &p.outputschema,
-		Columns:  orderCols,
-		RowCount: rc.RowCount,
+		Columns:  outPutCols,
+		RowCount: childBatch.RowCount,
 	}, nil
 }
 func (p *ProjectExec) Close() error {
@@ -74,36 +105,6 @@ func (p *ProjectExec) Schema() *arrow.Schema {
 
 // handle keeping only the request columns but make sure the schema and columns are also aligned
 // returns error if a column doesnt exist
-func ProjectSchemaFilterDown(schema *arrow.Schema, cols []arrow.Array, keepCols ...string) (*arrow.Schema, []arrow.Array, error) {
-	if len(keepCols) == 0 {
-		return arrow.NewSchema([]arrow.Field{}, nil), nil, ErrEmptyColumnsToProject
-	}
-
-	// Build map: columnName -> original index
-	fieldIndex := make(map[string]int) // age -> 0
-	for i, f := range schema.Fields() {
-		fieldIndex[f.Name] = i
-	}
-
-	newFields := make([]arrow.Field, 0, len(keepCols))
-	newCols := make([]arrow.Array, 0, len(keepCols))
-
-	// Preserve order from keepCols, not schema order
-	for _, name := range keepCols {
-		idx, exists := fieldIndex[name]
-		if !exists {
-			return arrow.NewSchema([]arrow.Field{}, nil), []arrow.Array{}, ErrProjectColumnNotFound
-		}
-
-		newFields = append(newFields, schema.Field(idx))
-		col := cols[idx]
-		col.Retain()
-		newCols = append(newCols, col)
-	}
-
-	newSchema := arrow.NewSchema(newFields, nil)
-	return newSchema, newCols, nil
-}
 
 func prunedSchema(schema *arrow.Schema, keepCols []string) (*arrow.Schema, error) {
 	if len(keepCols) == 0 {
