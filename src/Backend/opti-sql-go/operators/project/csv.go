@@ -124,7 +124,6 @@ func (csvS *CSVSource) processRow(
 			} else {
 				v, err := strconv.ParseInt(cell, 10, 64)
 				if err != nil {
-					fmt.Printf("failed to parse cell: %v with error: %v\n", cell, err)
 					b.AppendNull()
 				} else {
 					b.Append(v)
@@ -137,7 +136,6 @@ func (csvS *CSVSource) processRow(
 			} else {
 				v, err := strconv.ParseFloat(cell, 64)
 				if err != nil {
-					fmt.Printf("failed to parse cell: %v with error: %v\n", cell, err)
 					b.AppendNull()
 				} else {
 					b.Append(v)
