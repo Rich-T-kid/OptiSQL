@@ -116,6 +116,11 @@ make go-run
 make rust-run
 ```
 
+### Build and Run Frontend
+```bash
+make frontend-run
+```
+
 ### Run All Tests
 ```bash
 make test-all
@@ -125,6 +130,7 @@ Or run individually:
 ```bash
 make go-test
 make rust-test
+make frontend-test
 ```
 
 ### Run Linters
