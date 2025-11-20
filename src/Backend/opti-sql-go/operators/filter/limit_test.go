@@ -167,7 +167,9 @@ func TestLimitExec_IterationUntilEOF(t *testing.T) {
 		if total != 7 {
 			t.Fatalf("expected 7 total rows, got %d", total)
 		}
-		lim.Close()
+		if err := lim.Close(); err != nil {
+			t.Fatalf("unexpected error on close: %v", err)
+		}
 	})
 
 	t.Run("RequestZeroDoesNotChangeLimit", func(t *testing.T) {
@@ -189,19 +191,21 @@ func TestLimitExec_IterationUntilEOF(t *testing.T) {
 		if rb2.RowCount != 2 {
 			t.Fatalf("expected 2 rows, got %d", rb2.RowCount)
 		}
-		lim.Close()
+		if err := lim.Close(); err != nil {
+			t.Fatalf("unexpected error on close: %v", err)
+		}
 	})
 
 	t.Run("AfterEOFAlwaysEOF", func(t *testing.T) {
 		memSrc3, _ := project.NewInMemoryProjectExec(names, cols)
 		lim, _ := NewLimitExec(memSrc3, 2)
 
-		lim.Next(3) // exhaust
+		_, _ = lim.Next(3) // exhaust
 
 		_, err := lim.Next(1)
 		if !errors.Is(err, io.EOF) {
 			t.Fatalf("expected EOF, got %v", err)
 		}
-		lim.Close()
+		_ = lim.Close()
 	})
 }

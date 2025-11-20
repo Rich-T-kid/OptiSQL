@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"opti-sql-go/operators"
-	"opti-sql-go/operators/filter"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
@@ -23,8 +22,7 @@ var (
 type ParquetSource struct {
 	// existing fields
 	schema             *arrow.Schema
-	projectionPushDown []string            // columns to project up
-	predicatePushDown  []filter.FilterExpr // simple predicate push down for now
+	projectionPushDown []string // columns to project up
 	reader             pqarrow.RecordReader
 	// for internal reading
 	done bool // if set to true always return io.EOF
@@ -45,7 +43,7 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 
 	arrowReader, err := pqarrow.NewFileReader(
 		filerReader,
-		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 5}, // TODO: Read in from config for this stuff
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 1}, // TODO: Read in from config for this stuff
 		allocator,
 	)
 	if err != nil {
@@ -59,14 +57,13 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 	return &ParquetSource{
 		schema:             rdr.Schema(),
 		projectionPushDown: []string{},
-		predicatePushDown:  nil,
 		reader:             rdr,
 	}, nil
 
 }
 
 // source, columns you want to be push up the tree, any filters
-func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string, filters []filter.FilterExpr) (*ParquetSource, error) {
+func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*ParquetSource, error) {
 	if len(columns) == 0 {
 		return nil, errors.New("no columns were provided for projection push down")
 	}
@@ -85,7 +82,7 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string, filter
 
 	arrowReader, err := pqarrow.NewFileReader(
 		filerReader,
-		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 5}, // TODO: Read in from config for this stuff
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 1}, // TODO: Read in from config for this stuff
 		allocator,
 	)
 	if err != nil {
@@ -109,12 +106,11 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string, filter
 	return &ParquetSource{
 		schema:             rdr.Schema(),
 		projectionPushDown: columns,
-		predicatePushDown:  filters,
 		reader:             rdr,
 	}, nil
 }
 
-// This should be 1
+// double check that this return exactly n rows in a column.
 func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 	if ps.reader == nil || ps.done || !ps.reader.Next() {
 		return nil, io.EOF
@@ -272,6 +268,33 @@ func CombineArray(a1, a2 arrow.Array) arrow.Array {
 		b := array.NewBinaryBuilder(mem, arrow.BinaryTypes.Binary)
 		appendBinary(b, a1.(*array.Binary))
 		appendBinary(b, a2.(*array.Binary))
+		return b.NewArray()
+		// -------------------- TIMESTAMP[TZ] --------------------
+	case arrow.TIMESTAMP:
+		tsType := dt.(*arrow.TimestampType) // keeps unit + timezone
+
+		b := array.NewTimestampBuilder(mem, tsType)
+		arr1 := a1.(*array.Timestamp)
+		arr2 := a2.(*array.Timestamp)
+
+		// append arr1
+		for i := 0; i < arr1.Len(); i++ {
+			if arr1.IsNull(i) {
+				b.AppendNull()
+			} else {
+				b.Append(arr1.Value(i))
+			}
+		}
+
+		// append arr2
+		for i := 0; i < arr2.Len(); i++ {
+			if arr2.IsNull(i) {
+				b.AppendNull()
+			} else {
+				b.Append(arr2.Value(i))
+			}
+		}
+
 		return b.NewArray()
 
 	default:

@@ -984,7 +984,7 @@ func TestExprDataType(t *testing.T) {
 
 	t.Run("Literal_ReturnsType", func(t *testing.T) {
 		lit := &LiteralResolve{Type: arrow.PrimitiveTypes.Int32}
-		got := ExprDataType(lit, nil)
+		got, _ := ExprDataType(lit, nil)
 		if got.ID() != arrow.INT32 {
 			t.Fatalf("expected INT32, got %s", got)
 		}
@@ -992,24 +992,22 @@ func TestExprDataType(t *testing.T) {
 
 	t.Run("Column_ReturnsSchemaType", func(t *testing.T) {
 		col := &ColumnResolve{Name: "age"}
-		got := ExprDataType(col, schema)
+		got, _ := ExprDataType(col, schema)
 		if got.ID() != arrow.INT32 {
 			t.Fatalf("expected INT32, got %s", got)
 		}
 	})
 
 	t.Run("Column_Unknown_Panics", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatalf("expected panic for unknown column, got none")
-			}
-		}()
-		_ = ExprDataType(&ColumnResolve{Name: "missing"}, schema)
+		_, err := ExprDataType(&ColumnResolve{Name: "missing"}, schema)
+		if err == nil {
+			t.Fatalf("expected error for unknown column, got none")
+		}
 	})
 
 	t.Run("Alias_PreservesType", func(t *testing.T) {
 		a := &Alias{Expr: &LiteralResolve{Type: arrow.PrimitiveTypes.Float64}, Name: "f"}
-		got := ExprDataType(a, schema)
+		got, _ := ExprDataType(a, schema)
 		if got.ID() != arrow.FLOAT64 {
 			t.Fatalf("expected FLOAT64, got %s", got)
 		}
@@ -1017,7 +1015,7 @@ func TestExprDataType(t *testing.T) {
 
 	t.Run("Cast_ReturnsTargetType", func(t *testing.T) {
 		c := &CastExpr{Expr: &LiteralResolve{Type: arrow.PrimitiveTypes.Int32}, TargetType: arrow.PrimitiveTypes.Float64}
-		got := ExprDataType(c, schema)
+		got, _ := ExprDataType(c, schema)
 		if got.ID() != arrow.FLOAT64 {
 			t.Fatalf("expected FLOAT64, got %s", got)
 		}
@@ -1025,7 +1023,7 @@ func TestExprDataType(t *testing.T) {
 
 	t.Run("Binary_Arithmetic_PromotesToFloat64", func(t *testing.T) {
 		be := &BinaryExpr{Left: &LiteralResolve{Type: arrow.PrimitiveTypes.Int32}, Op: Addition, Right: &LiteralResolve{Type: arrow.PrimitiveTypes.Int32}}
-		got := ExprDataType(be, schema)
+		got, _ := ExprDataType(be, schema)
 		if got.ID() != arrow.FLOAT64 {
 			t.Fatalf("expected FLOAT64 from numericPromotion, got %s", got)
 		}
@@ -1033,7 +1031,7 @@ func TestExprDataType(t *testing.T) {
 
 	t.Run("Binary_Comparison_ReturnsBoolean", func(t *testing.T) {
 		be := &BinaryExpr{Left: &LiteralResolve{Type: arrow.PrimitiveTypes.Int32}, Op: Equal, Right: &LiteralResolve{Type: arrow.PrimitiveTypes.Int32}}
-		got := ExprDataType(be, schema)
+		got, _ := ExprDataType(be, schema)
 		if got.ID() != arrow.BOOL {
 			t.Fatalf("expected BOOL from comparison, got %s", got)
 		}
@@ -1041,20 +1039,18 @@ func TestExprDataType(t *testing.T) {
 
 	t.Run("ScalarFunction_Upper_String", func(t *testing.T) {
 		sf := &ScalarFunction{Function: Upper, Arguments: &LiteralResolve{Type: arrow.BinaryTypes.String}}
-		got := ExprDataType(sf, schema)
+		got, _ := ExprDataType(sf, schema)
 		if got.ID() != arrow.STRING {
 			t.Fatalf("expected STRING from Upper, got %s", got)
 		}
 	})
 
 	t.Run("UnsupportedExpr_Panics", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatalf("expected panic for unsupported expr type, got none")
-			}
-		}()
 		// InvariantExpr is a test-only expr that should hit the default case
-		_ = ExprDataType(&InvariantExpr{}, schema)
+		_, err := ExprDataType(&InvariantExpr{}, schema)
+		if err == nil {
+			t.Fatalf("expected error for unsupported expr type, got none")
+		}
 	})
 }
 
@@ -1080,15 +1076,6 @@ func TestInferBinaryType(t *testing.T) {
 		}
 	})
 
-	t.Run("UnsupportedOperator_Panics", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatalf("expected panic for unsupported operator, got none")
-			}
-		}()
-		// Use 'Not' which is not handled in inferBinaryType switch and should panic
-		_ = inferBinaryType(arrow.PrimitiveTypes.Int32, Not, arrow.PrimitiveTypes.Int32)
-	})
 }
 
 func TestNumericPromotion(t *testing.T) {
@@ -1192,9 +1179,276 @@ func TestExprInitMethods(t *testing.T) {
 		}
 	})
 }
+func TestFilterBinaryExpr(t *testing.T) {
+	t.Run("age == 22", func(t *testing.T) {
+		rc := generateTestColumns() //4
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(22))
+		col := NewColumnResolve("age")
+		be := NewBinaryExpr(col, Equal, literal)
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		out := arr.(*array.Boolean)
+		t.Logf("out:%v\n", out)
+		expected := []bool{false, false, false, true}
+		if len(expected) != out.Len() {
+			t.Fatalf("length mismatch: expected %d, got %d", len(expected), out.Len())
+		}
+		for i := 0; i < out.Len(); i++ {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("at index %d: expected %v, got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("age != 22", func(t *testing.T) {
+		rc := generateTestColumns()
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(22))
+		col := NewColumnResolve("age")
+		be := NewBinaryExpr(col, NotEqual, literal)
 
-func TestUnimplemntedOperators(t *testing.T) {
-	for i := Equal; i <= Or; i++ {
-		NewBinaryExpr(NewLiteralResolve(arrow.PrimitiveTypes.Int16, int16(10)), 3, NewLiteralResolve(arrow.PrimitiveTypes.Int16, int16(5)))
-	}
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{true, true, true, false}
+
+		if out.Len() != len(expected) {
+			t.Fatalf("length mismatch: expected %d, got %d", len(expected), out.Len())
+		}
+		for i := 0; i < out.Len(); i++ {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("at index %d: expected %v, got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("age < 34", func(t *testing.T) {
+		rc := generateTestColumns()
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(34))
+		col := NewColumnResolve("age")
+		be := NewBinaryExpr(col, LessThan, literal)
+
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{true, false, false, true}
+
+		if out.Len() != len(expected) {
+			t.Fatalf("length mismatch: expected %d, got %d", len(expected), out.Len())
+		}
+		for i := 0; i < out.Len(); i++ {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("index %d expected %v got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("age <= 34", func(t *testing.T) {
+		rc := generateTestColumns()
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(34))
+		col := NewColumnResolve("age")
+		be := NewBinaryExpr(col, LessThanOrEqual, literal)
+
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{true, true, false, true}
+
+		if out.Len() != len(expected) {
+			t.Fatalf("length mismatch: expected %d, got %d", len(expected), out.Len())
+		}
+		for i := 0; i < out.Len(); i++ {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("index %d expected %v got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("age > 30", func(t *testing.T) {
+		rc := generateTestColumns()
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30))
+		col := NewColumnResolve("age")
+		be := NewBinaryExpr(col, GreaterThan, literal)
+
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{false, true, true, false}
+
+		if out.Len() != len(expected) {
+			t.Fatalf("length mismatch: expected %d, got %d", len(expected), out.Len())
+		}
+		for i := 0; i < out.Len(); i++ {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("index %d expected %v got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("age >= 34", func(t *testing.T) {
+		rc := generateTestColumns()
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(34))
+		col := NewColumnResolve("age")
+		be := NewBinaryExpr(col, GreaterThanOrEqual, literal)
+
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{false, true, true, false}
+
+		if out.Len() != len(expected) {
+			t.Fatalf("length mismatch: expected %d, got %d", len(expected), out.Len())
+		}
+		for i := 0; i < out.Len(); i++ {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("index %d expected %v got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("logical AND: (age > 30) AND is_active", func(t *testing.T) {
+		rc := generateTestColumns()
+
+		left := NewBinaryExpr(
+			NewColumnResolve("age"),
+			GreaterThan,
+			NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+		)
+
+		right := NewBinaryExpr(
+			NewColumnResolve("is_active"),
+			Equal,
+			NewLiteralResolve(arrow.FixedWidthTypes.Boolean, true),
+		)
+
+		be := NewBinaryExpr(left, And, right)
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{false, false, true, false}
+
+		for i := range expected {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("index %d: expected %v got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+	t.Run("logical OR: (age < 30) OR is_active", func(t *testing.T) {
+		rc := generateTestColumns()
+
+		left := NewBinaryExpr(
+			NewColumnResolve("age"),
+			LessThan,
+			NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+		)
+
+		right := NewBinaryExpr(
+			NewColumnResolve("is_active"),
+			Equal,
+			NewLiteralResolve(arrow.FixedWidthTypes.Boolean, true),
+		)
+
+		be := NewBinaryExpr(left, Or, right)
+		arr, err := EvalExpression(be, rc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := arr.(*array.Boolean)
+		expected := []bool{true, false, true, true}
+
+		for i := range expected {
+			if out.Value(i) != expected[i] {
+				t.Fatalf("index %d: expected %v got %v", i, expected[i], out.Value(i))
+			}
+		}
+	})
+
+}
+
+func TestFilterBinaryExpr_InvalidTypes(t *testing.T) {
+	rc := generateTestColumns() // 4 rows
+
+	// LEFT = age (int32)
+	left := NewColumnResolve("age")
+
+	// RIGHT = name (string)  → mismatched type
+	right := NewColumnResolve("name")
+
+	t.Run("invalid Equal", func(t *testing.T) {
+		be := NewBinaryExpr(left, Equal, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (Equal), got nil")
+		}
+	})
+
+	t.Run("invalid NotEqual", func(t *testing.T) {
+		be := NewBinaryExpr(left, NotEqual, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (NotEqual), got nil")
+		}
+	})
+
+	t.Run("invalid LessThan", func(t *testing.T) {
+		be := NewBinaryExpr(left, LessThan, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (LessThan), got nil")
+		}
+	})
+
+	t.Run("invalid LessThanOrEqual", func(t *testing.T) {
+		be := NewBinaryExpr(left, LessThanOrEqual, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (LessThanOrEqual), got nil")
+		}
+	})
+
+	t.Run("invalid GreaterThan", func(t *testing.T) {
+		be := NewBinaryExpr(left, GreaterThan, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (GreaterThan), got nil")
+		}
+	})
+
+	t.Run("invalid GreaterThanOrEqual", func(t *testing.T) {
+		be := NewBinaryExpr(left, GreaterThanOrEqual, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (GreaterThanOrEqual), got nil")
+		}
+	})
+
+	t.Run("invalid AND", func(t *testing.T) {
+		be := NewBinaryExpr(left, And, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (AND), got nil")
+		}
+	})
+
+	t.Run("invalid OR", func(t *testing.T) {
+		be := NewBinaryExpr(left, Or, right)
+		_, err := EvalExpression(be, rc)
+		if err == nil {
+			t.Fatalf("expected error for mismatched datatypes (OR), got nil")
+		}
+	})
 }
