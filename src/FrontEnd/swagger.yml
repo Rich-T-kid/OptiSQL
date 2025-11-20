@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: OptiSQL Frontend API
+  description: FastAPI server for SQL query processing and optimization
+  version: 0.1.0
+paths:
+  /api/v1/health:
+    get:
+      tags:
+      - Health
+      summary: Health Check
+      description: "Health check endpoint to verify the service is running.\n\nReturns:\n\
+        \    HealthResponse: Current health status of the service"
+      operationId: health_check_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/query:
+    post:
+      tags:
+      - Query Processing
+      summary: Process Sql Query
+      description: "Process a SQL query against an uploaded file or a file from a\
+        \ URI.\n\nArgs:\n    sql_query: SQL query string to execute\n    file: Uploaded\
+        \ file (CSV, JSON, Parquet, etc.) - optional\n    file_uri: URI to a remote\
+        \ file (e.g., s3://bucket/file.csv, https://example.com/data.csv) - optional\n\
+        \nReturns:\n    SQLQueryResponse: Query processing results\n\nNote:\n    Either\
+        \ 'file' or 'file_uri' must be provided, but not both."
+      operationId: process_sql_query_api_v1_query_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_process_sql_query_api_v1_query_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SQLQueryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    Body_process_sql_query_api_v1_query_post:
+      properties:
+        sql_query:
+          type: string
+          title: Sql Query
+          description: SQL query to process
+        file_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: File Uri
+          description: URI to a remote file (optional if file is provided)
+        file:
+          anyOf:
+          - type: string
+            format: binary
+          - type: 'null'
+          title: File
+          description: Data file to process (optional if file_uri is provided)
+      type: object
+      required:
+      - sql_query
+      title: Body_process_sql_query_api_v1_query_post
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: Health status of the service
+        version:
+          type: string
+          title: Version
+          description: API version
+          default: 0.1.0
+      type: object
+      required:
+      - status
+      title: HealthResponse
+    SQLQueryResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: Processing status
+        query:
+          type: string
+          title: Query
+          description: Original SQL query
+        result:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Result
+          description: Query processing result
+        execution_time_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Execution Time Ms
+          description: Execution time in milliseconds
+      type: object
+      required:
+      - status
+      - query
+      title: SQLQueryResponse
+      example:
+        execution_time_ms: 123.45
+        query: SELECT * FROM users WHERE age > 25
+        result:
+          rows: 42
+        status: success
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

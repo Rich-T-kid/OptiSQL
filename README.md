@@ -4,6 +4,8 @@ A high-performance, in-memory query execution engine.
 
 ![Go Tests](https://github.com/Rich-T-kid/OptiSQL/actions/workflows/go-test.yml/badge.svg)
 ![Rust Tests](https://github.com/Rich-T-kid/OptiSQL/actions/workflows/rust-test.yml/badge.svg)
+![Frontend Tests](https://github.com/Rich-T-kid/OptiSQL/actions/workflows/frontend-test.yml/badge.svg)
+
 
 ## Overview
 
@@ -20,6 +22,8 @@ OptiSQL is a custom in-memory query execution engine. The backend (physical exec
 - Go 1.24+
 - Rust 1.70+
 - C++23
+- Python 3.11+
+- Docker 29+
 - Make
 - git
 
@@ -35,6 +39,13 @@ make go-run
 
 # Build and run Rust backend
 make rust-run
+
+# Frontend setup and run
+make frontend-setup    # Create venv and install dependencies
+make frontend-run      # Run locally without Docker
+# OR with Docker
+make frontend-docker-build
+make frontend-docker-run
 
 # Run all tests
 make test-all
@@ -58,7 +69,10 @@ OptiSQL/
 │   │   └── opti-sql-rs/          # Rust implementation (Go clone for learning)
 │   │       ├── src/project/      # Core project logic
 │   │       └── src/              # Query processing modules
-│   └── FrontEnd/                 # C++ frontend (in development)
+│   └── FrontEnd/                 # Python/FastAPI HTTP server (C++ query processing in progress)
+│       ├── app/                  # API endpoints and logic
+│       ├── tests/                # Frontend tests
+│       └── Dockerfile            # Docker configuration
 ├── .github/workflows/            # CI/CD pipelines
 ├── Makefile                      # Development commands
 └── CONTRIBUTING.md               # Contribution guidelines

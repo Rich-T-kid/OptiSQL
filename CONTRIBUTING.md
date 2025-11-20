@@ -32,7 +32,13 @@ We use a Makefile to simplify common development tasks. All commands should be r
   make rust-test
   ```
 
-### Run All Tests (Go + Rust)
+### Frontend Tests
+- Run all tests
+  ```bash
+  make frontend-test
+  ```
+
+### Run All Tests (Go + Rust + Frontend)
 - Run tests for both backends
   ```bash
   make test-all
@@ -116,6 +122,11 @@ make go-run
 make rust-run
 ```
 
+### Build and Run Frontend
+```bash
+make frontend-run
+```
+
 ### Run All Tests
 ```bash
 make test-all
@@ -125,6 +136,7 @@ Or run individually:
 ```bash
 make go-test
 make rust-test
+make frontend-test
 ```
 
 ### Run Linters
