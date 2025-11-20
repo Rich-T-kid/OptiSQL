@@ -23,9 +23,6 @@ enum class KeywordType {
     SELECT,
     FROM,
     WHERE,
-    INSERT,
-    UPDATE,
-    DELETE,
     
     // Filtering & Conditions
     BETWEEN,
@@ -91,7 +88,6 @@ enum class KeywordType {
     NUMERIC,
     
     // String Types
-    CHAR,
     VARCHAR,
     TEXT,
     
@@ -106,13 +102,6 @@ enum class KeywordType {
     TIMESTAMP,
     YEAR,
     INTERVAL,
-    
-    // Array/Collection Types
-    ARRAY,
-    
-    // Enum/Set
-    ENUM,
-    SET_TYPE,
     
     // Set Operations
     UNION,
@@ -129,9 +118,6 @@ enum class KeywordType {
     
     // Other Common Keywords
     AS,
-    INTO,
-    VALUES,
-    SET,
     ALL,
     ANY,
     SOME,
