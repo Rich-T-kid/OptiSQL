@@ -1,6 +1,6 @@
 module opti-sql-go
 
-go 1.24.0
+go 1.23
 
 require (
 	github.com/apache/arrow/go/v17 v17.0.0

@@ -1,4 +1,4 @@
-.PHONY: help go-test rust-test go-run rust-run go-lint rust-lint go-fmt rust-fmt test-all lint-all fmt-all pre-push
+.PHONY: help go-test rust-test go-run rust-run go-lint rust-lint go-fmt rust-fmt frontend-test frontend-run frontend-docker-build frontend-docker-run frontend-docker-down frontend-setup test-all lint-all fmt-all pre-push
 
 # Default target
 help:
@@ -11,7 +11,13 @@ help:
 	@echo "  make rust-lint     - Run Rust linter and formatter check"
 	@echo "  make go-fmt        - Format Go code"
 	@echo "  make rust-fmt      - Format Rust code"
-	@echo "  make test-all      - Run all tests (Go + Rust)"
+	@echo "  make frontend-test - Run Python/Frontend tests"
+	@echo "  make frontend-run  - Run Frontend server (without Docker)"
+	@echo "  make frontend-setup - Setup Python virtual environment and install dependencies"
+	@echo "  make frontend-docker-build - Build Frontend Docker image"
+	@echo "  make frontend-docker-run   - Run Frontend using Docker Compose"
+	@echo "  make frontend-docker-down  - Stop Frontend Docker containers"
+	@echo "  make test-all      - Run all tests (Go + Rust + Frontend)"
 	@echo "  make lint-all      - Run all linters (Go + Rust)"
 	@echo "  make fmt-all       - Format all code (Go + Rust)"
 	@echo "  make pre-push      - Run fmt, lint, and test (use before pushing)"
@@ -71,8 +77,47 @@ rust-fmt-check:
 	@echo "Checking Rust formatting..."
 	cd src/Backend/opti-sql-rs && cargo fmt --check
 
+# Frontend targets
+frontend-setup:
+	@echo "Setting up Python virtual environment..."
+	rm -rf src/FrontEnd/venv
+	cd src/FrontEnd && python3.12 -m venv --without-pip venv
+	@echo "Installing pip..."
+	cd src/FrontEnd && . venv/bin/activate && curl -sS https://bootstrap.pypa.io/get-pip.py | python
+	@echo "Installing dependencies..."
+	cd src/FrontEnd && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt
+	@echo "Frontend setup completed! Activate with: cd src/FrontEnd && source venv/bin/activate"
+
+frontend-test: frontend-setup
+	@echo "Running Frontend/Python tests..."
+	cd src/FrontEnd && . venv/bin/activate && pytest -m "not integration"
+
+frontend-run:
+	@echo "Running Frontend server..."
+	cd src/FrontEnd && . venv/bin/activate && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8005 
+
+frontend-docker-build:
+	@echo "Building Frontend Docker image..."
+	@if [ ! -f src/FrontEnd/.env ]; then \
+		echo "Creating .env file from root .env..."; \
+		cp .env src/FrontEnd/.env; \
+	fi
+	cd src/FrontEnd && docker compose build
+
+frontend-docker-run:
+	@echo "Running Frontend with Docker Compose..."
+	@if [ ! -f src/FrontEnd/.env ]; then \
+		echo "Creating .env file from root .env..."; \
+		cp .env src/FrontEnd/.env; \
+	fi
+	cd src/FrontEnd && docker compose up -d
+
+frontend-docker-down:
+	@echo "Stopping Frontend Docker containers..."
+	cd src/FrontEnd && docker compose down
+
 # Combined targets
-test-all: go-test rust-test
+test-all: go-test rust-test frontend-test
 	@echo "All tests completed!"
 
 lint-all: go-lint rust-lint
