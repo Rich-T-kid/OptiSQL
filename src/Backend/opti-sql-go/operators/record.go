@@ -15,9 +15,16 @@ var (
 	}
 )
 
+type Operator interface {
+	Next(uint16) (*RecordBatch, error)
+	Schema() *arrow.Schema
+	// Call Operator.Close() after Next returns an io.EOF to clean up resources
+	Close() error
+}
 type RecordBatch struct {
-	Schema  *arrow.Schema
-	Columns []arrow.Array
+	Schema   *arrow.Schema
+	Columns  []arrow.Array
+	RowCount uint64 // TODO: update to actually use this, in all operators
 }
 
 type SchemaBuilder struct {
@@ -114,6 +121,13 @@ func (rb *RecordBatch) DeepEqual(other *RecordBatch) bool {
 		}
 	}
 	return true
+}
+func (rb *RecordBatch) ColumnByName(name string) (arrow.Array, error) {
+	indices := rb.Schema.FieldIndices(name)
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("column with name '%s' not found in schema", name)
+	}
+	return rb.Columns[indices[0]], nil
 }
 func (rbb *RecordBatchBuilder) GenIntArray(values ...int) arrow.Array {
 	mem := memory.NewGoAllocator()

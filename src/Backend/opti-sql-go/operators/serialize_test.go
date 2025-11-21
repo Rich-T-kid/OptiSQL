@@ -136,7 +136,7 @@ func TestSerializerInit(t *testing.T) {
 // TestSchemaOnlySerialization tests standalone schema serialization/deserialization
 func TestSchemaOnlySerialization(t *testing.T) {
 	recordBatch := generateDummyRecordBatch1()
-	fmt.Printf("original schema before serialization: %v\n", recordBatch.Schema)
+	t.Logf("original schema before serialization: %v\n", recordBatch.Schema)
 
 	ss, err := NewSerializer(recordBatch.Schema)
 	if err != nil {
@@ -148,7 +148,7 @@ func TestSchemaOnlySerialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Schema serialization failed: %v", err)
 	}
-	fmt.Printf("serialized schema bytes length: %d\n", len(serializedSchema))
+	t.Logf("serialized schema bytes length: %d\n", len(serializedSchema))
 
 	// Deserialize schema
 	deserializedSchema, err := ss.schemaFromDisk(bytes.NewBuffer(serializedSchema))
@@ -160,7 +160,7 @@ func TestSchemaOnlySerialization(t *testing.T) {
 	if !deserializedSchema.Equal(recordBatch.Schema) {
 		t.Fatal("Deserialized schema does not match the original schema")
 	}
-	fmt.Printf("schema after serialization & deserialization: %v\n", deserializedSchema)
+	t.Logf("schema after serialization & deserialization: %v\n", deserializedSchema)
 
 	// Validate field properties
 	for i := 0; i < recordBatch.Schema.NumFields(); i++ {
@@ -745,7 +745,7 @@ func TestSerializationWithDifferentTypes(t *testing.T) {
 func TestNullSchemaSerialize(t *testing.T) {
 	rb := generateNullableRecordBatch()
 	for i := range rb.Schema.Fields() {
-		fmt.Printf("is nullable? : %v\n", rb.Schema.Field(i).Nullable)
+		t.Logf("is nullable? : %v\n", rb.Schema.Field(i).Nullable)
 	}
 	serializer, err := NewSerializer(rb.Schema)
 	if err != nil {
