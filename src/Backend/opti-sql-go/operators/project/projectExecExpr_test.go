@@ -212,7 +212,7 @@ func TestProjectExec_Literal_Literal(t *testing.T) {
 		}
 		for i := 0; i < len(expected); i++ {
 			if ageCol.Value(i) != expected[i] {
-				t.Fatalf("expected %d at position %d, but recieved %d", expected[i], i, ageCol.Value(i))
+				t.Fatalf("expected %d at position %d, but received %d", expected[i], i, ageCol.Value(i))
 			}
 		}
 	})

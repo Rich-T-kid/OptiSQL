@@ -153,26 +153,6 @@ func TestProjectExec_BinaryAdd(t *testing.T) {
 	t.Logf("column: %+v", rb.Columns[0])
 }
 
-// TODO: once your implement the other operators this test will fail
-func TestUnimplemntedOperators(t *testing.T) {
-	names, cols := generateTestColumns()
-	memSrc, _ := NewInMemoryProjectExec(names, cols)
-	for i := Expr.Equal; i <= Expr.Or; i++ {
-		br := Expr.NewBinaryExpr(Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int16, int16(10)), i, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int16, int16(5)))
-
-		proj, err := NewProjectExec(memSrc, []Expr.Expression{br})
-		if err != nil {
-			t.Fatalf("failed to create project exec: %v", err)
-		}
-		_, err = proj.Next(1)
-		if err == nil {
-			t.Fatalf("expected error for unimplemented operator %d, got nil", i)
-
-		}
-		t.Logf("error: %v", err)
-	}
-}
-
 func TestProjectExec_IterateEOF(t *testing.T) {
 	names, cols := generateTestColumns()
 	memSrc, _ := NewInMemoryProjectExec(names, cols)

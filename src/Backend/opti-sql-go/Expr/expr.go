@@ -1,9 +1,12 @@
 package Expr
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"opti-sql-go/operators"
+	"regexp"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -15,6 +18,9 @@ import (
 var (
 	ErrUnsupportedExpression = func(info string) error {
 		return fmt.Errorf("unsupported expression passed to EvalExpression: %s", info)
+	}
+	ErrCantCompareDifferentTypes = func(leftType, rightType arrow.DataType) error {
+		return fmt.Errorf("cannot compare different data types: %s and %s", leftType, rightType)
 	}
 )
 
@@ -36,7 +42,8 @@ const (
 	// logical
 	And binaryOperator = 12
 	Or  binaryOperator = 13
-	Not binaryOperator = 14
+	// RegEx expressions
+	Like binaryOperator = 14 // where column_name like "patte%n_with_wi%dcard_"
 )
 
 type supportedFunctions int
@@ -103,36 +110,45 @@ func EvalExpression(expr Expression, batch *operators.RecordBatch) (arrow.Array,
 	}
 }
 
-func ExprDataType(e Expression, inputSchema *arrow.Schema) arrow.DataType {
+func ExprDataType(e Expression, inputSchema *arrow.Schema) (arrow.DataType, error) {
 	switch ex := e.(type) {
 
 	case *LiteralResolve:
-		return ex.Type
+		return ex.Type, nil
 
 	case *ColumnResolve:
 		idx := inputSchema.FieldIndices(ex.Name)
 		if len(idx) == 0 {
-			panic(fmt.Sprintf("exprDataType: unknown column %q", ex.Name))
+			return nil, fmt.Errorf("exprDataType: unknown column %q", ex.Name)
 		}
-		return inputSchema.Field(idx[0]).Type
+		return inputSchema.Field(idx[0]).Type, nil
 	case *Alias:
 		// alias does NOT change type
 		return ExprDataType(ex.Expr, inputSchema)
 
 	case *CastExpr:
-		return ex.TargetType
+		return ex.TargetType, nil
 
 	case *BinaryExpr:
-		leftType := ExprDataType(ex.Left, inputSchema)
-		rightType := ExprDataType(ex.Right, inputSchema)
-		return inferBinaryType(leftType, ex.Op, rightType)
+		leftType, err := ExprDataType(ex.Left, inputSchema)
+		if err != nil {
+			return nil, err
+		}
+		rightType, err := ExprDataType(ex.Right, inputSchema)
+		if err != nil {
+			return nil, err
+		}
+		return inferBinaryType(leftType, ex.Op, rightType), nil
 
 	case *ScalarFunction:
-		argType := ExprDataType(ex.Arguments, inputSchema)
-		return inferScalarFunctionType(ex.Function, argType)
+		argType, err := ExprDataType(ex.Arguments, inputSchema)
+		if err != nil {
+			return nil, err
+		}
+		return inferScalarFunctionType(ex.Function, argType), nil
 
 	default:
-		panic(fmt.Sprintf("unsupported expr type %T", ex))
+		return nil, ErrUnsupportedExpression(ex.String())
 	}
 }
 func NewExpressions(exprs ...Expression) []Expression {
@@ -403,25 +419,95 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 		return unpackDatum(datum)
 
 	// comparisions TODO:
+	// These return a boolean array
 	case Equal:
-		return nil, fmt.Errorf("operator Equal (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "equal", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	case NotEqual:
-		return nil, fmt.Errorf("operator NotEqual (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "not_equal", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	case LessThan:
-		return nil, fmt.Errorf("operator LessThan (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "less", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	case LessThanOrEqual:
-		return nil, fmt.Errorf("operator LessThanOrEqual (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "less_equal", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	case GreaterThan:
-		return nil, fmt.Errorf("operator GreaterThan (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "greater", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	case GreaterThanOrEqual:
-		return nil, fmt.Errorf("operator GreaterThanOrEqual (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "greater_equal", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	// logical
 	case And:
-		return nil, fmt.Errorf("operator And (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "and", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
 	case Or:
-		return nil, fmt.Errorf("operator Or (%d) not yet implemented", b.Op)
-	case Not:
-		return nil, fmt.Errorf("operator Not (%d) not yet implemented", b.Op)
+		if leftArr.DataType() != rightArr.DataType() {
+			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
+		}
+		datum, err := compute.CallFunction(context.Background(), "or", compute.DefaultFilterOptions(), compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		if err != nil {
+			return nil, err
+		}
+		return unpackDatum(datum)
+	case Like:
+		if leftArr.DataType() != arrow.BinaryTypes.String || rightArr.DataType() != arrow.BinaryTypes.String {
+			// regEx runs only on strings
+			return nil, errors.New("binary operator Like only works on arrays of strings")
+		}
+		var compiledRegEx = compileSqlRegEx(rightArr.ValueStr(0))
+		filterBuilder := array.NewBooleanBuilder(memory.NewGoAllocator())
+		leftStrArray := leftArr.(*array.String)
+		for i := 0; i < leftStrArray.Len(); i++ {
+			valid := validRegEx(leftStrArray.Value(i), compiledRegEx)
+			fmt.Printf("does %s match %s: %v\n", leftStrArray.Value(i), compiledRegEx, valid)
+			filterBuilder.Append(valid)
+		}
+		return filterBuilder.NewArray(), nil
+
 	}
 	return nil, fmt.Errorf("binary operator %d not supported", b.Op)
 }
@@ -435,28 +521,6 @@ func unpackDatum(d compute.Datum) (arrow.Array, error) {
 		return nil, fmt.Errorf("datum %v is not of type array", d)
 	}
 	return array.MakeArray(), nil
-}
-func inferBinaryType(left arrow.DataType, op binaryOperator, right arrow.DataType) arrow.DataType {
-	switch op {
-
-	case Addition, Subtraction, Multiplication, Division:
-		// numeric → numeric promotion rules
-		return numericPromotion(left, right)
-
-	case Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual:
-		return arrow.FixedWidthTypes.Boolean
-
-	case And, Or:
-		return arrow.FixedWidthTypes.Boolean
-
-	default:
-		panic(fmt.Sprintf("inferBinaryType: unsupported operator %v", op))
-	}
-}
-func numericPromotion(a, b arrow.DataType) arrow.DataType {
-	// simplest version: return float64 for any mixed numeric types.
-	// expand later when needed.
-	return arrow.PrimitiveTypes.Float64
 }
 
 type ScalarFunction struct {
@@ -513,6 +577,44 @@ func (s *ScalarFunction) ExprNode() {}
 func (s *ScalarFunction) String() string {
 	return fmt.Sprintf("ScalarFunction(%d, %v)", s.Function, s.Arguments)
 }
+
+// If cast succeeds → return the casted value
+// If cast fails → throw a runtime error
+type CastExpr struct {
+	Expr       Expression // can be a Literal or Column (check for datatype when you resolve)
+	TargetType arrow.DataType
+}
+
+func NewCastExpr(expr Expression, targetType arrow.DataType) *CastExpr {
+	return &CastExpr{
+		Expr:       expr,
+		TargetType: targetType,
+	}
+}
+
+func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
+	arr, err := EvalExpression(c.Expr, batch)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use Arrow compute kernel to cast
+	castOpts := compute.SafeCastOptions(c.TargetType)
+	out, err := compute.CastArray(context.TODO(), arr, castOpts)
+	if err != nil {
+		// This is a runtime cast error
+		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
+			arr.DataType(), c.TargetType, err)
+	}
+
+	return out, nil
+}
+
+func (c *CastExpr) ExprNode() {}
+func (c *CastExpr) String() string {
+	return fmt.Sprintf("Cast(%s AS %s)", c.Expr, c.TargetType)
+}
+
 func upperImpl(arr arrow.Array) (arrow.Array, error) {
 	strArr, ok := arr.(*array.String)
 	if !ok {
@@ -564,39 +666,66 @@ func inferScalarFunctionType(fn supportedFunctions, argType arrow.DataType) arro
 	}
 }
 
-// If cast succeeds → return the casted value
-// If cast fails → throw a runtime error
-type CastExpr struct {
-	Expr       Expression // can be a Literal or Column (check for datatype when you resolve)
-	TargetType arrow.DataType
-}
+func inferBinaryType(left arrow.DataType, op binaryOperator, right arrow.DataType) arrow.DataType {
+	switch op {
 
-func NewCastExpr(expr Expression, targetType arrow.DataType) *CastExpr {
-	return &CastExpr{
-		Expr:       expr,
-		TargetType: targetType,
+	case Addition, Subtraction, Multiplication, Division:
+		// numeric → numeric promotion rules
+		return numericPromotion(left, right)
+
+	case Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual:
+		return arrow.FixedWidthTypes.Boolean
+
+	case And, Or:
+		return arrow.FixedWidthTypes.Boolean
+
+	default:
+		panic(fmt.Sprintf("inferBinaryType: unsupported operator %v", op))
 	}
 }
-
-func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
-	arr, err := EvalExpression(c.Expr, batch)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use Arrow compute kernel to cast
-	castOpts := compute.SafeCastOptions(c.TargetType)
-	out, err := compute.CastArray(context.TODO(), arr, castOpts)
-	if err != nil {
-		// This is a runtime cast error
-		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
-			arr.DataType(), c.TargetType, err)
-	}
-
-	return out, nil
+func numericPromotion(a, b arrow.DataType) arrow.DataType {
+	// simplest version: return float64 for any mixed numeric types.
+	return arrow.PrimitiveTypes.Float64
 }
 
-func (c *CastExpr) ExprNode() {}
-func (c *CastExpr) String() string {
-	return fmt.Sprintf("Cast(%s AS %s)", c.Expr, c.TargetType)
+func compileSqlRegEx(s string) string {
+	var buf bytes.Buffer
+
+	// Track anchoring rules
+	startsWithWildcard := len(s) > 0 && s[0] == '%'
+	endsWithWildcard := len(s) > 0 && s[len(s)-1] == '%'
+
+	// Build body
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '_':
+			buf.WriteString(".")
+		case '%':
+			buf.WriteString(".*")
+		default:
+			// Escape regex meta chars
+			if strings.ContainsRune(`.^$|()[]*+?{}`, rune(s[i])) {
+				buf.WriteByte('\\')
+			}
+			buf.WriteByte(s[i])
+		}
+	}
+
+	regex := buf.String()
+
+	// Apply anchoring
+	if !startsWithWildcard {
+		regex = "^" + regex
+	}
+	if !endsWithWildcard {
+		regex = regex + "$"
+	}
+
+	return regex
+}
+
+func validRegEx(columnValue, regExExpr string) bool {
+	ok, _ := regexp.MatchString(regExExpr, columnValue)
+	return ok
+
 }

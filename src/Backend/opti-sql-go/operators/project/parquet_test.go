@@ -58,7 +58,7 @@ func TestParquetInit(t *testing.T) {
 	t.Run("Test No names pass in", func(t *testing.T) {
 		f := getTestParquetFile()
 
-		_, err := NewParquetSourcePushDown(f, []string{}, nil)
+		_, err := NewParquetSourcePushDown(f, []string{})
 		if err == nil {
 			t.Errorf("Expected error when no columns are passed in, but got nil")
 		}
@@ -66,7 +66,7 @@ func TestParquetInit(t *testing.T) {
 
 	t.Run("Test invalid names are passed in", func(t *testing.T) {
 		f := getTestParquetFile()
-		_, err := NewParquetSourcePushDown(f, []string{"non_existent_column"}, nil)
+		_, err := NewParquetSourcePushDown(f, []string{"non_existent_column"})
 		if err == nil {
 			t.Errorf("Expected error when invalid column names are passed in, but got nil")
 		}
@@ -75,7 +75,7 @@ func TestParquetInit(t *testing.T) {
 	t.Run("Test correct schema is returned", func(t *testing.T) {
 		f := getTestParquetFile()
 		columns := []string{"country", "capital", "lat"}
-		source, err := NewParquetSourcePushDown(f, columns, nil)
+		source, err := NewParquetSourcePushDown(f, columns)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -94,15 +94,15 @@ func TestParquetInit(t *testing.T) {
 	t.Run("Test input columns and filters were passed back out", func(t *testing.T) {
 		f := getTestParquetFile()
 		columns := []string{"country", "capital", "lat"}
-		source, err := NewParquetSourcePushDown(f, columns, nil)
+		source, err := NewParquetSourcePushDown(f, columns)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 		if len(source.projectionPushDown) != len(columns) {
 			t.Errorf("Expected projectionPushDown to have %d columns, got %d", len(columns), len(source.projectionPushDown))
 		}
-		if !sameStringSlice(source.projectionPushDown, columns) || source.predicatePushDown != nil {
-			t.Errorf("Expected projectionPushDown to be %v and predicatePushDown to be nil, got %v and %v", columns, source.projectionPushDown, source.predicatePushDown)
+		if !sameStringSlice(source.projectionPushDown, columns) {
+			t.Errorf("Expected projectionPushDown to be %v and predicatePushDown to be nil, got %v and ", columns, source.projectionPushDown)
 		}
 	})
 
@@ -110,7 +110,7 @@ func TestParquetInit(t *testing.T) {
 
 		f := getTestParquetFile()
 		columns := []string{"country", "capital", "lat"}
-		source, err := NewParquetSourcePushDown(f, columns, nil)
+		source, err := NewParquetSourcePushDown(f, columns)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -124,7 +124,7 @@ func TestParquetInit(t *testing.T) {
 func TestParquetClose(t *testing.T) {
 	f := getTestParquetFile()
 	columns := []string{"country", "capital", "lat"}
-	source, err := NewParquetSourcePushDown(f, columns, nil)
+	source, err := NewParquetSourcePushDown(f, columns)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestParquetClose(t *testing.T) {
 func TestRunToEnd(t *testing.T) {
 	f := getTestParquetFile()
 	columns := []string{"country", "capital", "lat"}
-	source, err := NewParquetSourcePushDown(f, columns, nil)
+	source, err := NewParquetSourcePushDown(f, columns)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestRunToEnd(t *testing.T) {
 func TestParquetRead(t *testing.T) {
 	f := getTestParquetFile()
 	columns := []string{"country", "capital", "lat"}
-	source, err := NewParquetSourcePushDown(f, columns, nil)
+	source, err := NewParquetSourcePushDown(f, columns)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}

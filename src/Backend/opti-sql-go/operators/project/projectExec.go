@@ -32,14 +32,21 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 	for i, e := range exprs {
 		switch ex := e.(type) {
 		case *Expr.Alias:
+			tp, err := Expr.ExprDataType(ex.Expr, input.Schema())
+			if err != nil {
+				return nil, fmt.Errorf("project exec: failed to get expression data type for expr %d: %w", i, err)
+			}
 			fields[i] = arrow.Field{
 				Name:     ex.Name,
-				Type:     Expr.ExprDataType(ex.Expr, input.Schema()),
+				Type:     tp,
 				Nullable: true,
 			}
 		default:
 			name := fmt.Sprintf("col_%d", i)
-			Type := Expr.ExprDataType(e, input.Schema())
+			Type, err := Expr.ExprDataType(e, input.Schema())
+			if err != nil {
+				return nil, fmt.Errorf("project exec: failed to get expression data type for expr %d: %w", i, err)
+			}
 			fields[i] = arrow.Field{
 				Name:     name,
 				Type:     Type,
@@ -97,7 +104,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}, nil
 }
 func (p *ProjectExec) Close() error {
-	return nil
+	return p.child.Close()
 }
 func (p *ProjectExec) Schema() *arrow.Schema {
 	return &p.outputschema
