@@ -22,7 +22,7 @@ OptiSQL is a custom in-memory query execution engine. The backend (physical exec
 - Go 1.24+
 - Rust 1.70+
 - C++23
-- Python 3.11+
+- Python 3.12
 - Docker 29+
 - Make
 - git
