@@ -16,7 +16,7 @@ var (
 	_ = (operators.Operator)(&FilterExec{})
 )
 
-// FilterExpr takes in a field and column and yeilds a function that takes in an index and returns a bool indicating whether the row at that index satisfies the filter condition.
+// FilterExec is an operator that filters input records according to a predicate expression.
 type FilterExec struct {
 	input     operators.Operator
 	schema    *arrow.Schema
@@ -49,7 +49,10 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	boolArr := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
+	boolArr, ok := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
+	if !ok {
+		return nil, errors.New("predicate did not evaluate to boolean array")
+	}
 	filteredCol := make([]arrow.Array, len(batch.Columns))
 	for i, col := range batch.Columns {
 		filteredCol[i], err = applyBooleanMask(col, boolArr)
@@ -73,7 +76,6 @@ func (f *FilterExec) Schema() *arrow.Schema {
 	return f.schema
 }
 
-// TODO: check if this pattern is good
 func (f *FilterExec) Close() error {
 	return f.input.Close()
 }

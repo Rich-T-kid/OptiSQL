@@ -23,3 +23,7 @@ package Expr
 //COALESCE(a, b)
 //5. Constants
 //SELECT 1, 'hello', 3.14
+
+// =======================
+// These are all implemented
+// =======================

@@ -104,7 +104,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}, nil
 }
 func (p *ProjectExec) Close() error {
-	return nil
+	return p.child.Close()
 }
 func (p *ProjectExec) Schema() *arrow.Schema {
 	return &p.outputschema

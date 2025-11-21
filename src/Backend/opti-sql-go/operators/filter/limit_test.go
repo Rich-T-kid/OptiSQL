@@ -3,8 +3,12 @@ package filter
 import (
 	"errors"
 	"io"
+	"opti-sql-go/Expr"
 	"opti-sql-go/operators/project"
 	"testing"
+
+	"github.com/apache/arrow/go/v17/arrow"
+	"github.com/apache/arrow/go/v17/arrow/array"
 )
 
 func generateTestColumns() ([]string, []any) {
@@ -46,6 +50,43 @@ func basicProject() *project.InMemorySource {
 	v, _ := project.NewInMemoryProjectExec(names, col)
 	return v
 }
+func maskAny(t *testing.T, src *project.InMemorySource, expr Expr.Expression, expected []bool) {
+	t.Helper()
+
+	// 1. Pull the record batch from the project source
+	batch, err := src.Next(10)
+	if err != nil {
+		t.Fatalf("failed to fetch record batch: %v", err)
+	}
+	if batch == nil {
+		t.Fatalf("expected non-nil record batch from project source")
+	}
+
+	// 2. Evaluate expression against the batch
+	out, err := Expr.EvalExpression(expr, batch)
+	if err != nil {
+		t.Fatalf("EvalExpression error: %v", err)
+	}
+
+	// 3. Extract boolean mask
+	mask, ok := out.(*array.Boolean)
+	if !ok {
+		t.Fatalf("expected output to be *array.Boolean, got %T", out)
+	}
+
+	// 4. Validate length matches
+	if mask.Len() != len(expected) {
+		t.Fatalf("expected mask length %d, got %d", len(expected), mask.Len())
+	}
+
+	// 5. Validate each element
+	for i := 0; i < mask.Len(); i++ {
+		if mask.Value(i) != expected[i] {
+			t.Fatalf("mask[%d]: expected %v, got %v", i, expected[i], mask.Value(i))
+		}
+	}
+}
+
 func TestLimitInit(t *testing.T) {
 	// Simple passing test
 	trialProject := basicProject()
@@ -137,7 +178,7 @@ func TestLimitExec_NextBehavior(t *testing.T) {
 		}
 		_, err = lim.Next(10)
 		if !errors.Is(err, io.EOF) {
-			t.Fatalf("was expecting io.EOF but recieved %v", err)
+			t.Fatalf("was expecting io.EOF but received %v", err)
 		}
 	})
 }
@@ -207,5 +248,291 @@ func TestLimitExec_IterationUntilEOF(t *testing.T) {
 			t.Fatalf("expected EOF, got %v", err)
 		}
 		_ = lim.Close()
+	})
+}
+
+/*
+==============================================
+//            Wild Card Test
+==============================================
+*/
+func TestLikePercentWildcards(t *testing.T) {
+
+	t.Run("name starts with A (A%)", func(t *testing.T) {
+		src := basicProject()
+		sql := "A%"
+
+		expected := []bool{
+			true, false, false, false, false,
+			false, false, false, false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("name ends with e (%e)", func(t *testing.T) {
+		src := basicProject()
+		sql := "%e"
+
+		expected := []bool{
+			true, // Alice
+			false,
+			true, // Charlie
+			false,
+			true, // Eve
+			false,
+			true, // Grace
+			false,
+			false,
+			true, // Jake
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("name contains 'an' (%an%)", func(t *testing.T) {
+		src := basicProject()
+		sql := "%an%"
+
+		expected := []bool{
+			false, false, false, false, false,
+			true, // Frank
+			false,
+			true, // Hannah
+			false,
+			false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("wildcard only (%) matches all rows", func(t *testing.T) {
+		src := basicProject()
+		sql := "%"
+
+		expected := []bool{
+			true, true, true, true, true,
+			true, true, true, true, true,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+}
+
+func TestLikeSingleUnderscore(t *testing.T) {
+
+	t.Run("name is exactly 5 characters (_____)", func(t *testing.T) {
+		src := basicProject()
+		sql := "_____"
+
+		// Alice, David, Grace
+		expected := []bool{
+			true, // Alice (5)
+			false,
+			false,
+			true, // David (5)
+			false,
+			true, // Frank (5)
+			true, // Grace (5)
+			false,
+			false,
+			false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("name starts with H and length is 6 (H_____)", func(t *testing.T) {
+		src := basicProject()
+		sql := "H_____"
+
+		// Hannah is 6 letters
+		expected := []bool{
+			false, false, false, false, false,
+			false, false,
+			true, // Hannah
+			false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("fourth letter is r (___r%)", func(t *testing.T) {
+		src := basicProject()
+		sql := "___r%"
+
+		// Charlie → C h a r …
+		expected := []bool{
+			false, false,
+			true, // Charlie
+			false, false,
+			false, false, false, false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+}
+
+func TestLikeMixedWildcards(t *testing.T) {
+
+	t.Run("starts with C and exactly 7 chars (C______)", func(t *testing.T) {
+		src := basicProject()
+		sql := "C______"
+
+		// Charlie (7 letters)
+		expected := []bool{
+			false, false,
+			true, // Charlie
+			false, false,
+			false, false, false, false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("ends with ake (_ake)", func(t *testing.T) {
+		src := basicProject()
+		sql := "_ake"
+
+		// Jake → J a k e, matches _ake
+		expected := []bool{
+			false, false, false, false, false,
+			false, false, false, false,
+			true, // Jake
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("starts with H and contains ah (H%ah%)", func(t *testing.T) {
+		src := basicProject()
+		sql := "H%ah%"
+
+		// Hannah contains "ah" twice
+		expected := []bool{
+			false, false, false, false, false,
+			false, false,
+			true, // Hannah
+			false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+}
+
+func TestLikeEdgeCases(t *testing.T) {
+
+	t.Run("empty pattern matches nothing", func(t *testing.T) {
+		src := basicProject()
+		sql := ""
+
+		expected := []bool{
+			false, false, false, false, false,
+			false, false, false, false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("no names end with zz (%zz)", func(t *testing.T) {
+		src := basicProject()
+		sql := "%zz"
+
+		expected := []bool{
+			false, false, false, false, false,
+			false, false, false, false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
+	})
+
+	t.Run("single underscore (_) matches 1-char names only", func(t *testing.T) {
+		src := basicProject()
+		sql := "_"
+
+		expected := []bool{
+			false, false, false, false, false,
+			false, false, false, false, false,
+		}
+
+		expr := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("name"),
+			Expr.Like,
+			Expr.NewLiteralResolve(arrow.BinaryTypes.String, sql),
+		)
+
+		maskAny(t, src, expr, expected)
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -16,7 +17,8 @@ import (
 )
 
 var (
-	_ = (operators.Operator)(&ParquetSource{})
+	_      = (operators.Operator)(&ParquetSource{})
+	Config = config.GetConfig()
 )
 
 type ParquetSource struct {
@@ -43,7 +45,7 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 
 	arrowReader, err := pqarrow.NewFileReader(
 		filerReader,
-		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 1}, // TODO: Read in from config for this stuff
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: int64(Config.Batch.Size)}, // TODO: Read in from config for this stuff
 		allocator,
 	)
 	if err != nil {
@@ -82,7 +84,7 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*Parq
 
 	arrowReader, err := pqarrow.NewFileReader(
 		filerReader,
-		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: 1}, // TODO: Read in from config for this stuff
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: int64(Config.Batch.Size)}, // TODO: Read in from config for this stuff
 		allocator,
 	)
 	if err != nil {
@@ -143,7 +145,6 @@ func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 			// Replace
 			columns[colIdx] = combined
 
-			// VERY IMPORTANT:
 			// Release the old existing array to avoid leaks
 			existing.Release()
 		}
@@ -152,7 +153,7 @@ func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 		curRow += numRows
 	}
 	return &operators.RecordBatch{
-		Schema:   ps.schema, // Remove the pointer as ps.Schema is already of type arrow.Schema
+		Schema:   ps.schema,
 		Columns:  columns,
 		RowCount: uint64(curRow),
 	}, nil

@@ -1452,3 +1452,224 @@ func TestFilterBinaryExpr_InvalidTypes(t *testing.T) {
 		}
 	})
 }
+
+func TestCompileRegEx(t *testing.T) {
+	t.Run("starts with abc", func(t *testing.T) {
+		sqlString := "abc%"
+		expectedRegEx := "^abc.*"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("only % (matches anything)", func(t *testing.T) {
+		sqlString := "%"
+		expectedRegEx := ".*"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("starts with foo", func(t *testing.T) {
+		sqlString := "foo%"
+		expectedRegEx := "^foo.*"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("ends with xyz", func(t *testing.T) {
+		sqlString := "%xyz"
+		expectedRegEx := ".*xyz$"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("contains dog", func(t *testing.T) {
+		sqlString := "%dog%"
+		expectedRegEx := ".*dog.*"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("exactly 3 chars", func(t *testing.T) {
+		sqlString := "___"
+		expectedRegEx := "^...$"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("a_z pattern", func(t *testing.T) {
+		sqlString := "a_z"
+		expectedRegEx := "^a.z$"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("error-__", func(t *testing.T) {
+		sqlString := "error-__"
+		expectedRegEx := "^error-..$"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("3 chars then log", func(t *testing.T) {
+		sqlString := "___log"
+		expectedRegEx := "^...log$"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+
+	t.Run("file-%.txt", func(t *testing.T) {
+		sqlString := "%file-%.txt"
+		expectedRegEx := ".*file-.*\\.txt$"
+		res := compileSqlRegEx(sqlString)
+		if res != expectedRegEx {
+			t.Fatalf("expected %v, received %s", expectedRegEx, res)
+		}
+	})
+}
+
+func TestLikeOperatorSQL(t *testing.T) {
+	t.Run("name starts with a", func(t *testing.T) {
+		rc := generateTestColumns()
+		sqlStatment := "A%"
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		boolMask, err := EvalExpression(whereStatment, rc)
+		if err != nil {
+			t.Fatalf("unexpected error from EvalExpression")
+		}
+		mask, ok := boolMask.(*array.Boolean)
+		if !ok {
+			t.Fatalf("expected array type to be of type boolean but got %T, error:%v", mask, err)
+		}
+		expectedMask := []bool{true, false, false, false}
+		if mask.Len() != len(expectedMask) {
+			t.Fatalf("expected boolean array len to be %d but got %d", len(expectedMask), mask.Len())
+		}
+		for i := 0; i < mask.Len(); i++ {
+			if mask.Value(i) != expectedMask[i] {
+				t.Fatalf("expected mask[%d] to be %v but got %v", i, expectedMask[i], mask.Value(i))
+			}
+		}
+	})
+	t.Run("name contains li", func(t *testing.T) {
+		rc := generateTestColumns()
+		sqlStatment := "%li%"
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+
+		boolMask, err := EvalExpression(whereStatment, rc)
+		if err != nil {
+			t.Fatalf("unexpected error from EvalExpression")
+		}
+
+		mask, ok := boolMask.(*array.Boolean)
+		if !ok {
+			t.Fatalf("expected array type to be boolean, got %T, error:%v", mask, err)
+		}
+
+		expectedMask := []bool{true, false, true, false} // Alice, Charlie
+
+		if mask.Len() != len(expectedMask) {
+			t.Fatalf("expected mask len %d, got %d", len(expectedMask), mask.Len())
+		}
+		for i := 0; i < mask.Len(); i++ {
+			if mask.Value(i) != expectedMask[i] {
+				t.Fatalf("expected mask[%d]=%v but got %v", i, expectedMask[i], mask.Value(i))
+			}
+		}
+	})
+	t.Run("name ends with d", func(t *testing.T) {
+		rc := generateTestColumns()
+		sqlStatment := "%d"
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+
+		boolMask, err := EvalExpression(whereStatment, rc)
+		if err != nil {
+			t.Fatalf("unexpected error from EvalExpression")
+		}
+
+		mask, ok := boolMask.(*array.Boolean)
+		if !ok {
+			t.Fatalf("expected array type boolean, got %T, error:%v", mask, err)
+		}
+
+		expectedMask := []bool{false, false, false, true} // only David ends with d
+
+		if mask.Len() != len(expectedMask) {
+			t.Fatalf("expected mask len %d, got %d", len(expectedMask), mask.Len())
+		}
+		for i := 0; i < mask.Len(); i++ {
+			if mask.Value(i) != expectedMask[i] {
+				t.Fatalf("expected mask[%d]=%v but got %v", i, expectedMask[i], mask.Value(i))
+			}
+		}
+	})
+	t.Run("name is exactly 5 letters", func(t *testing.T) {
+		rc := generateTestColumns()
+		sqlStatment := "_____"
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+
+		boolMask, err := EvalExpression(whereStatment, rc)
+		if err != nil {
+			t.Fatalf("unexpected error from EvalExpression")
+		}
+
+		mask, ok := boolMask.(*array.Boolean)
+		if !ok {
+			t.Fatalf("expected boolean array got %T, error:%v", mask, err)
+		}
+
+		expectedMask := []bool{true, false, false, true} // Alice (5), David (5)
+
+		if mask.Len() != len(expectedMask) {
+			t.Fatalf("expected mask len %d, got %d", len(expectedMask), mask.Len())
+		}
+		for i := 0; i < mask.Len(); i++ {
+			if mask.Value(i) != expectedMask[i] {
+				t.Fatalf("expected mask[%d]=%v but got %v", i, expectedMask[i], mask.Value(i))
+			}
+		}
+	})
+	t.Run("name starts with Ch", func(t *testing.T) {
+		rc := generateTestColumns()
+		sqlStatment := "Ch%"
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+
+		boolMask, err := EvalExpression(whereStatment, rc)
+		if err != nil {
+			t.Fatalf("unexpected error from EvalExpression")
+		}
+
+		mask, ok := boolMask.(*array.Boolean)
+		if !ok {
+			t.Fatalf("expected boolean array got %T, error:%v", mask, err)
+		}
+
+		expectedMask := []bool{false, false, true, false} // only Charlie starts with Ch
+
+		if mask.Len() != len(expectedMask) {
+			t.Fatalf("expected mask len %d, got %d", len(expectedMask), mask.Len())
+		}
+		for i := 0; i < mask.Len(); i++ {
+			if mask.Value(i) != expectedMask[i] {
+				t.Fatalf("expected mask[%d]=%v but got %v", i, expectedMask[i], mask.Value(i))
+			}
+		}
+	})
+}

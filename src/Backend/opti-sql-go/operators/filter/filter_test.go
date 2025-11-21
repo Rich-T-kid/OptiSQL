@@ -206,7 +206,7 @@ func TestFilterExec_EdgeCases(t *testing.T) {
 
 		_, err := f.Next(0)
 		if err == nil {
-			t.Fatalf("exepected error but got %v", err)
+			t.Fatalf("expected error but got %v", err)
 		}
 	})
 

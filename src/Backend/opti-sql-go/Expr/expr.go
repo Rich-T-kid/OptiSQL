@@ -1,9 +1,12 @@
 package Expr
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"opti-sql-go/operators"
+	"regexp"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -39,6 +42,8 @@ const (
 	// logical
 	And binaryOperator = 12
 	Or  binaryOperator = 13
+	// RegEx expressions
+	Like binaryOperator = 14 // where column_name like "patte%n_with_wi%dcard_"
 )
 
 type supportedFunctions int
@@ -488,6 +493,21 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 			return nil, err
 		}
 		return unpackDatum(datum)
+	case Like:
+		if leftArr.DataType() != arrow.BinaryTypes.String || rightArr.DataType() != arrow.BinaryTypes.String {
+			// regEx runs only on strings
+			return nil, errors.New("binary operator Like only works on arrays of strings")
+		}
+		var compiledRegEx = compileSqlRegEx(rightArr.ValueStr(0))
+		filterBuilder := array.NewBooleanBuilder(memory.NewGoAllocator())
+		leftStrArray := leftArr.(*array.String)
+		for i := 0; i < leftStrArray.Len(); i++ {
+			valid := validRegEx(leftStrArray.Value(i), compiledRegEx)
+			fmt.Printf("does %s match %s: %v\n", leftStrArray.Value(i), compiledRegEx, valid)
+			filterBuilder.Append(valid)
+		}
+		return filterBuilder.NewArray(), nil
+
 	}
 	return nil, fmt.Errorf("binary operator %d not supported", b.Op)
 }
@@ -501,28 +521,6 @@ func unpackDatum(d compute.Datum) (arrow.Array, error) {
 		return nil, fmt.Errorf("datum %v is not of type array", d)
 	}
 	return array.MakeArray(), nil
-}
-func inferBinaryType(left arrow.DataType, op binaryOperator, right arrow.DataType) arrow.DataType {
-	switch op {
-
-	case Addition, Subtraction, Multiplication, Division:
-		// numeric → numeric promotion rules
-		return numericPromotion(left, right)
-
-	case Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual:
-		return arrow.FixedWidthTypes.Boolean
-
-	case And, Or:
-		return arrow.FixedWidthTypes.Boolean
-
-	default:
-		panic(fmt.Sprintf("inferBinaryType: unsupported operator %v", op))
-	}
-}
-func numericPromotion(a, b arrow.DataType) arrow.DataType {
-	// simplest version: return float64 for any mixed numeric types.
-	// expand later when needed.
-	return arrow.PrimitiveTypes.Float64
 }
 
 type ScalarFunction struct {
@@ -579,6 +577,44 @@ func (s *ScalarFunction) ExprNode() {}
 func (s *ScalarFunction) String() string {
 	return fmt.Sprintf("ScalarFunction(%d, %v)", s.Function, s.Arguments)
 }
+
+// If cast succeeds → return the casted value
+// If cast fails → throw a runtime error
+type CastExpr struct {
+	Expr       Expression // can be a Literal or Column (check for datatype when you resolve)
+	TargetType arrow.DataType
+}
+
+func NewCastExpr(expr Expression, targetType arrow.DataType) *CastExpr {
+	return &CastExpr{
+		Expr:       expr,
+		TargetType: targetType,
+	}
+}
+
+func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
+	arr, err := EvalExpression(c.Expr, batch)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use Arrow compute kernel to cast
+	castOpts := compute.SafeCastOptions(c.TargetType)
+	out, err := compute.CastArray(context.TODO(), arr, castOpts)
+	if err != nil {
+		// This is a runtime cast error
+		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
+			arr.DataType(), c.TargetType, err)
+	}
+
+	return out, nil
+}
+
+func (c *CastExpr) ExprNode() {}
+func (c *CastExpr) String() string {
+	return fmt.Sprintf("Cast(%s AS %s)", c.Expr, c.TargetType)
+}
+
 func upperImpl(arr arrow.Array) (arrow.Array, error) {
 	strArr, ok := arr.(*array.String)
 	if !ok {
@@ -630,39 +666,66 @@ func inferScalarFunctionType(fn supportedFunctions, argType arrow.DataType) arro
 	}
 }
 
-// If cast succeeds → return the casted value
-// If cast fails → throw a runtime error
-type CastExpr struct {
-	Expr       Expression // can be a Literal or Column (check for datatype when you resolve)
-	TargetType arrow.DataType
-}
+func inferBinaryType(left arrow.DataType, op binaryOperator, right arrow.DataType) arrow.DataType {
+	switch op {
 
-func NewCastExpr(expr Expression, targetType arrow.DataType) *CastExpr {
-	return &CastExpr{
-		Expr:       expr,
-		TargetType: targetType,
+	case Addition, Subtraction, Multiplication, Division:
+		// numeric → numeric promotion rules
+		return numericPromotion(left, right)
+
+	case Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual:
+		return arrow.FixedWidthTypes.Boolean
+
+	case And, Or:
+		return arrow.FixedWidthTypes.Boolean
+
+	default:
+		panic(fmt.Sprintf("inferBinaryType: unsupported operator %v", op))
 	}
 }
-
-func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
-	arr, err := EvalExpression(c.Expr, batch)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use Arrow compute kernel to cast
-	castOpts := compute.SafeCastOptions(c.TargetType)
-	out, err := compute.CastArray(context.TODO(), arr, castOpts)
-	if err != nil {
-		// This is a runtime cast error
-		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
-			arr.DataType(), c.TargetType, err)
-	}
-
-	return out, nil
+func numericPromotion(a, b arrow.DataType) arrow.DataType {
+	// simplest version: return float64 for any mixed numeric types.
+	return arrow.PrimitiveTypes.Float64
 }
 
-func (c *CastExpr) ExprNode() {}
-func (c *CastExpr) String() string {
-	return fmt.Sprintf("Cast(%s AS %s)", c.Expr, c.TargetType)
+func compileSqlRegEx(s string) string {
+	var buf bytes.Buffer
+
+	// Track anchoring rules
+	startsWithWildcard := len(s) > 0 && s[0] == '%'
+	endsWithWildcard := len(s) > 0 && s[len(s)-1] == '%'
+
+	// Build body
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '_':
+			buf.WriteString(".")
+		case '%':
+			buf.WriteString(".*")
+		default:
+			// Escape regex meta chars
+			if strings.ContainsRune(`.^$|()[]*+?{}`, rune(s[i])) {
+				buf.WriteByte('\\')
+			}
+			buf.WriteByte(s[i])
+		}
+	}
+
+	regex := buf.String()
+
+	// Apply anchoring
+	if !startsWithWildcard {
+		regex = "^" + regex
+	}
+	if !endsWithWildcard {
+		regex = regex + "$"
+	}
+
+	return regex
+}
+
+func validRegEx(columnValue, regExExpr string) bool {
+	ok, _ := regexp.MatchString(regExExpr, columnValue)
+	return ok
+
 }

@@ -11,7 +11,6 @@ var (
 	_ = (operators.Operator)(&LimitExec{})
 )
 
-// TODO: (1) Implement Limter Exec Operator | pretty straightforward
 type LimitExec struct {
 	input     operators.Operator
 	schema    *arrow.Schema
@@ -67,7 +66,6 @@ func (l *LimitExec) Schema() *arrow.Schema {
 	return l.schema
 }
 
-// nothing to close
 func (l *LimitExec) Close() error {
-	return nil
+	return l.input.Close()
 }
