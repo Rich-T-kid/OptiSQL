@@ -110,3 +110,4 @@ src/Backend/test_data/json
 # allow parquet file
 !src/Backend/test_data/parquet/
 !src/Backend/test_data/parquet/capitals_clean.parquet
+!src/Backend/test_data/s3_source/**
