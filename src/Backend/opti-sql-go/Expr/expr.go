@@ -602,7 +602,6 @@ func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
 	castOpts := compute.SafeCastOptions(c.TargetType)
 	out, err := compute.CastArray(context.TODO(), arr, castOpts)
 	if err != nil {
-		// This is a runtime cast error
 		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
 			arr.DataType(), c.TargetType, err)
 	}

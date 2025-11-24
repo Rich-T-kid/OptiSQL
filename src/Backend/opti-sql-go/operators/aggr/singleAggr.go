@@ -1,0 +1,266 @@
+package aggr
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"opti-sql-go/Expr"
+	"opti-sql-go/operators"
+
+	"github.com/apache/arrow/go/v17/arrow"
+	"github.com/apache/arrow/go/v17/arrow/array"
+	"github.com/apache/arrow/go/v17/arrow/compute"
+)
+
+// TODO: next steps are to deal with group by statments but that can be dealt with after basic aggr that return just 1 global value
+var (
+	ErrUnsupportedAggrFunc = func(aggr int) error {
+		return fmt.Errorf("%d is an unsupported aggregate function", aggr)
+	}
+	ErrInvalidAggrColumnType = func(value any) error {
+		return fmt.Errorf("%v of type %T cannot be cast to float64 so it is not a valid column type to aggragate on", value, value)
+	}
+)
+
+type AggrFunc int
+
+const (
+	Min AggrFunc = iota
+	Max
+	Count
+	Sum
+	Avg
+)
+
+var (
+	_ = (Accumulator)(&MinAggrAccumulator{})
+	_ = (Accumulator)(&MaxAggrAccumulator{})
+	_ = (Accumulator)(&CountAggrAccumulator{})
+	_ = (Accumulator)(&SumAggrAccumulator{})
+	_ = (Accumulator)(&AvgAggrAccumulator{})
+	_ = (operators.Operator)(&AggrExec{})
+)
+
+// Min
+//Max
+//Count
+// Sum
+// Avg
+
+// for now just focus on single-column aggregation without group by
+type AggregateFunctions struct {
+	AggrFunc AggrFunc        // switch to deal with seperate aggregation functions
+	Child    Expr.Expression // resolves to a column generally
+}
+type Accumulator interface {
+	Update(value float64)
+	Finalize() float64
+}
+
+func newMinAggr() Accumulator {
+	return &MinAggrAccumulator{}
+}
+
+type MinAggrAccumulator struct {
+	minV       float64
+	firstValue bool
+}
+
+func (m *MinAggrAccumulator) Update(value float64) {
+	if !m.firstValue {
+		m.minV = value
+		m.firstValue = true
+		return
+	}
+	m.minV = min(m.minV, value)
+
+}
+func (m *MinAggrAccumulator) Finalize() float64 { return m.minV }
+func newMaxAggr() Accumulator {
+	return &MaxAggrAccumulator{}
+}
+
+type MaxAggrAccumulator struct {
+	maxV       float64
+	firstValue bool
+}
+
+func (m *MaxAggrAccumulator) Update(value float64) {
+	if !m.firstValue {
+		m.maxV = value
+		m.firstValue = true
+		return
+	}
+	m.maxV = max(m.maxV, value)
+}
+func (m *MaxAggrAccumulator) Finalize() float64 { return m.maxV }
+
+func NewCountAggr() Accumulator {
+	return &CountAggrAccumulator{}
+}
+
+type CountAggrAccumulator struct {
+	count float64
+}
+
+func (c *CountAggrAccumulator) Update(_ float64) {
+	c.count++
+}
+func (c *CountAggrAccumulator) Finalize() float64 { return c.count }
+
+func NewSumAggr() Accumulator {
+	return &SumAggrAccumulator{}
+}
+
+type SumAggrAccumulator struct {
+	summation float64
+}
+
+func (s *SumAggrAccumulator) Update(value float64) {
+	s.summation += value
+}
+func (s *SumAggrAccumulator) Finalize() float64 { return s.summation }
+func newAvgAggr() Accumulator {
+	return &AvgAggrAccumulator{}
+}
+
+type AvgAggrAccumulator struct {
+	values float64
+	count  float64
+}
+
+func (a *AvgAggrAccumulator) Update(value float64) {
+	a.values += value
+	a.count++
+}
+func (a *AvgAggrAccumulator) Finalize() float64 { return float64(a.values / a.count) }
+
+// ===================
+// Aggregator Operator
+// ===================
+type AggrExec struct {
+	child          operators.Operator   // child operator
+	schema         *arrow.Schema        // output schema
+	aggExpressions []AggregateFunctions // list of wanted aggregate expressions
+	accumulators   []Accumulator        // list of accumulators corresponding to aggExpressions, these will actually work to compute the aggregation
+	done           bool                 // know when to return io.EOF
+}
+
+func NewAggrExec(child operators.Operator, aggExprs []AggregateFunctions) (*AggrExec, error) {
+	accs := make([]Accumulator, len(aggExprs))
+	fields := make([]arrow.Field, len(aggExprs))
+	for i, agg := range aggExprs {
+		dt, err := Expr.ExprDataType(agg.Child, child.Schema())
+		if err != nil || !validAggrType(dt) {
+			return nil, ErrInvalidAggrColumnType(dt)
+		}
+		var fieldName string
+		switch agg.AggrFunc {
+		case Min:
+			fieldName = fmt.Sprintf("min_%s", agg.Child.String())
+			accs[i] = newMinAggr()
+		case Max:
+			fieldName = fmt.Sprintf("max_%s", agg.Child.String())
+			accs[i] = newMaxAggr()
+		case Count:
+			fieldName = fmt.Sprintf("count_%s", agg.Child.String())
+			accs[i] = NewCountAggr()
+		case Sum:
+			fieldName = fmt.Sprintf("sum_%s", agg.Child.String())
+			accs[i] = NewSumAggr()
+		case Avg:
+			fieldName = fmt.Sprintf("avg_%s", agg.Child.String())
+			accs[i] = newAvgAggr()
+
+		default:
+			return nil, ErrUnsupportedAggrFunc(int(agg.AggrFunc))
+		}
+		fields[i] = arrow.Field{
+			Name:     fieldName,
+			Type:     arrow.PrimitiveTypes.Float64,
+			Nullable: true,
+		}
+	}
+	return &AggrExec{
+		child:          child,
+		schema:         arrow.NewSchema(fields, nil),
+		aggExpressions: aggExprs,
+		accumulators:   accs,
+	}, nil
+}
+
+// check for io.EOF with flag
+// read in all record batches
+// for each batch, run Expr.Evaluate, to get the column you want for the expression (cast to float64)
+//
+//	for each element of that column grab the values you want using the accumulator interface
+//
+// build output batch, for now its just 1 of everything straight forward
+func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
+	if a.done {
+		return nil, io.EOF
+	}
+	for {
+		childBatch, err := a.child.Next(n)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+		for i, aggExpr := range a.aggExpressions {
+			agrArray, err := Expr.EvalExpression(aggExpr.Child, childBatch)
+			if err != nil {
+				return nil, err
+			}
+			agrArray, err = castArrayToFloat64(agrArray)
+			if err != nil {
+				return nil, err
+			}
+			valueArray := agrArray.(*array.Float64)
+			accumulator := a.accumulators[i]
+			for i := 0; i < valueArray.Len(); i++ {
+				accumulator.Update(valueArray.Value(i))
+			}
+
+		}
+	}
+	// build array with just the result of the column
+	resultColumns := make([]arrow.Array, len(a.accumulators))
+	for i := range a.accumulators {
+		resultColumns[i] = operators.NewRecordBatchBuilder().GenFloatArray(a.accumulators[i].Finalize())
+	}
+	return &operators.RecordBatch{
+		Schema:   a.schema,
+		Columns:  resultColumns,
+		RowCount: uint64(len(a.aggExpressions)),
+	}, io.EOF
+	// this is a pipeline breaker so it will always consume all of the input which means this needs to return an io.EOF
+}
+
+func (a *AggrExec) Schema() *arrow.Schema {
+	return a.schema
+}
+func (a *AggrExec) Close() error {
+	return a.child.Close()
+}
+
+func validAggrType(dt arrow.DataType) bool {
+	switch dt.ID() {
+	case arrow.UINT8, arrow.UINT16, arrow.UINT32, arrow.UINT64,
+		arrow.INT8, arrow.INT16, arrow.INT32, arrow.INT64, arrow.FLOAT16, arrow.FLOAT32, arrow.FLOAT64:
+		return true
+	default:
+		return false
+	}
+}
+
+func castArrayToFloat64(arr arrow.Array) (arrow.Array, error) {
+	outDatum, err := compute.CastArray(context.TODO(), arr, compute.NewCastOptions(&arrow.Float64Type{}, true))
+	if err != nil {
+		return nil, err
+	}
+
+	return outDatum, nil
+}
