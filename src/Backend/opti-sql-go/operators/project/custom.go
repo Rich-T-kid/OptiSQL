@@ -73,6 +73,35 @@ func (ms *InMemorySource) withFields(names ...string) error {
 	ms.columns = cols
 	return nil
 }
+func NewInMemoryProjectExecFromArrays(names []string, arrays []arrow.Array) (*InMemorySource, error) {
+	if len(names) != len(arrays) {
+		return nil, operators.ErrInvalidSchema("number of column names and arrays do not match")
+	}
+
+	fields := make([]arrow.Field, len(names))
+	fieldToColIdx := make(map[string]int, len(names))
+
+	for i, arr := range arrays {
+		if arr == nil {
+			return nil, operators.ErrInvalidSchema(fmt.Sprintf("nil array for column %s", names[i]))
+		}
+
+		fields[i] = arrow.Field{
+			Name:     names[i],
+			Type:     arr.DataType(),
+			Nullable: true, // Arrow arrays may have null bitmaps
+		}
+
+		fieldToColIdx[names[i]] = i
+	}
+
+	return &InMemorySource{
+		schema:        arrow.NewSchema(fields, nil),
+		columns:       arrays,
+		fieldToColIDx: fieldToColIdx,
+	}, nil
+}
+
 func (ms *InMemorySource) Next(n uint16) (*operators.RecordBatch, error) {
 	if len(ms.columns) == 0 || ms.pos >= uint16(ms.columns[0].Len()) {
 		return nil, io.EOF // EOF

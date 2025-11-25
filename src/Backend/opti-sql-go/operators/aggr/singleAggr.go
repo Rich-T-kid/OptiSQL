@@ -13,16 +13,16 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/compute"
 )
 
-// TODO: next steps are to deal with group by statments but that can be dealt with after basic aggr that return just 1 global value
 var (
 	ErrUnsupportedAggrFunc = func(aggr int) error {
 		return fmt.Errorf("%d is an unsupported aggregate function", aggr)
 	}
 	ErrInvalidAggrColumnType = func(value any) error {
-		return fmt.Errorf("%v of type %T cannot be cast to float64 so it is not a valid column type to aggragate on", value, value)
+		return fmt.Errorf("%v of type %T cannot be cast to float64 so it is not a valid column type to aggregate on", value, value)
 	}
 )
 
+// AggrFunc represents the type of aggregation function to be performed.
 type AggrFunc int
 
 const (
@@ -34,21 +34,14 @@ const (
 )
 
 var (
-	_ = (Accumulator)(&MinAggrAccumulator{})
-	_ = (Accumulator)(&MaxAggrAccumulator{})
-	_ = (Accumulator)(&CountAggrAccumulator{})
-	_ = (Accumulator)(&SumAggrAccumulator{})
-	_ = (Accumulator)(&AvgAggrAccumulator{})
+	_ = (accumulator)(&MinAggrAccumulator{})
+	_ = (accumulator)(&MaxAggrAccumulator{})
+	_ = (accumulator)(&CountAggrAccumulator{})
+	_ = (accumulator)(&SumAggrAccumulator{})
+	_ = (accumulator)(&AvgAggrAccumulator{})
 	_ = (operators.Operator)(&AggrExec{})
 )
 
-// Min
-//Max
-//Count
-// Sum
-// Avg
-
-// for now just focus on single-column aggregation without group by
 func NewAggregateFunctions(aggrFunc AggrFunc, child Expr.Expression) AggregateFunctions {
 	return AggregateFunctions{
 		AggrFunc: aggrFunc,
@@ -57,15 +50,15 @@ func NewAggregateFunctions(aggrFunc AggrFunc, child Expr.Expression) AggregateFu
 }
 
 type AggregateFunctions struct {
-	AggrFunc AggrFunc        // switch to deal with seperate aggregation functions
+	AggrFunc AggrFunc        // switch to deal with separate aggregate functions
 	Child    Expr.Expression // resolves to a column generally
 }
-type Accumulator interface {
+type accumulator interface {
 	Update(value float64)
 	Finalize() float64
 }
 
-func newMinAggr() Accumulator {
+func newMinAggr() accumulator {
 	return &MinAggrAccumulator{}
 }
 
@@ -84,7 +77,7 @@ func (m *MinAggrAccumulator) Update(value float64) {
 
 }
 func (m *MinAggrAccumulator) Finalize() float64 { return m.minV }
-func newMaxAggr() Accumulator {
+func newMaxAggr() accumulator {
 	return &MaxAggrAccumulator{}
 }
 
@@ -103,7 +96,7 @@ func (m *MaxAggrAccumulator) Update(value float64) {
 }
 func (m *MaxAggrAccumulator) Finalize() float64 { return m.maxV }
 
-func NewCountAggr() Accumulator {
+func NewCountAggr() accumulator {
 	return &CountAggrAccumulator{}
 }
 
@@ -116,7 +109,7 @@ func (c *CountAggrAccumulator) Update(_ float64) {
 }
 func (c *CountAggrAccumulator) Finalize() float64 { return c.count }
 
-func NewSumAggr() Accumulator {
+func NewSumAggr() accumulator {
 	return &SumAggrAccumulator{}
 }
 
@@ -128,34 +121,43 @@ func (s *SumAggrAccumulator) Update(value float64) {
 	s.summation += value
 }
 func (s *SumAggrAccumulator) Finalize() float64 { return s.summation }
-func newAvgAggr() Accumulator {
+func newAvgAggr() accumulator {
 	return &AvgAggrAccumulator{}
 }
 
 type AvgAggrAccumulator struct {
+	used   bool
 	values float64
 	count  float64
 }
 
 func (a *AvgAggrAccumulator) Update(value float64) {
+	a.used = true
 	a.values += value
 	a.count++
 }
-func (a *AvgAggrAccumulator) Finalize() float64 { return float64(a.values / a.count) }
+func (a *AvgAggrAccumulator) Finalize() float64 {
+	// handles divide by zero
+	if !a.used {
+		return 0.0
+	}
+	return a.values / a.count
+}
 
 // ===================
 // Aggregator Operator
 // ===================
+// handles global aggregations without group by
 type AggrExec struct {
 	child          operators.Operator   // child operator
 	schema         *arrow.Schema        // output schema
 	aggExpressions []AggregateFunctions // list of wanted aggregate expressions
-	accumulators   []Accumulator        // list of accumulators corresponding to aggExpressions, these will actually work to compute the aggregation
+	accumulators   []accumulator        // list of accumulators corresponding to aggExpressions, these will actually work to compute the aggregation
 	done           bool                 // know when to return io.EOF
 }
 
 func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) (*AggrExec, error) {
-	accs := make([]Accumulator, len(aggExprs))
+	accs := make([]accumulator, len(aggExprs))
 	fields := make([]arrow.Field, len(aggExprs))
 	for i, agg := range aggExprs {
 		dt, err := Expr.ExprDataType(agg.Child, child.Schema())
@@ -210,6 +212,7 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	for {
 		childBatch, err := a.child.Next(n)
+		fmt.Printf("child batch: %v\n", childBatch)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -228,6 +231,9 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 			valueArray := agrArray.(*array.Float64)
 			accumulator := a.accumulators[i]
 			for j := 0; j < valueArray.Len(); j++ {
+				if valueArray.IsNull(j) {
+					continue
+				}
 				accumulator.Update(valueArray.Value(j))
 			}
 
@@ -242,8 +248,8 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 	return &operators.RecordBatch{
 		Schema:   a.schema,
 		Columns:  resultColumns,
-		RowCount: uint64(len(a.aggExpressions)),
-	}, io.EOF
+		RowCount: 1,
+	}, nil
 	// this is a pipeline breaker so it will always consume all of the input which means this needs to return an io.EOF
 }
 

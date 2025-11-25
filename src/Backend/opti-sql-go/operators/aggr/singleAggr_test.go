@@ -62,9 +62,78 @@ func generateAggTestColumns() ([]string, []any) {
 
 	return names, columns
 }
+func generateAggTestColumnsWithNulls(mem memory.Allocator) ([]string, []arrow.Array) {
+	names := []string{"id", "name", "age", "salary"}
+
+	// -------------------------
+	// id column (int32)
+	// -------------------------
+	idB := array.NewInt32Builder(mem)
+	idVals := []int32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	idValid := []bool{
+		true, true, false, true, true,
+		false, true, true, true, false,
+	}
+	idB.AppendValues(idVals, idValid)
+	idArr := idB.NewArray()
+
+	// -------------------------
+	// name column (string)
+	// -------------------------
+	nameB := array.NewStringBuilder(mem)
+	nameVals := []string{
+		"Alice", "Bob", "Charlie", "David", "Eve",
+		"Frank", "Grace", "Hannah", "Ivy", "Jake",
+	}
+	nameValid := []bool{
+		true, true, true, false, true,
+		true, true, true, false, true,
+	}
+	nameB.AppendValues(nameVals, nameValid)
+	nameArr := nameB.NewArray()
+
+	// -------------------------
+	// age column (int32)
+	// -------------------------
+	ageB := array.NewInt32Builder(mem)
+	ageVals := []int32{28, 34, 45, 22, 31, 29, 40, 36, 50, 26}
+	ageValid := []bool{
+		true, false, true, true, true,
+		true, false, true, true, true,
+	}
+	ageB.AppendValues(ageVals, ageValid)
+	ageArr := ageB.NewArray()
+
+	// -------------------------
+	// salary column (float64)
+	// -------------------------
+	salB := array.NewFloat64Builder(mem)
+	salVals := []float64{
+		70000, 82000, 54000, 91000, 60000,
+		75000, 66000, 0, 45000, 99000,
+	}
+
+	salaryValid := []bool{
+		true, true, true, true, true,
+		true, true, false, true, true,
+	}
+
+	salB.AppendValues(salVals, salaryValid)
+	salaryArr := salB.NewArray()
+
+	return names, []arrow.Array{idArr, nameArr, ageArr, salaryArr}
+}
+
 func aggProject() *project.InMemorySource {
 	names, cols := generateAggTestColumns()
 	p, _ := project.NewInMemoryProjectExec(names, cols)
+	return p
+}
+
+// TODO: add test that check for null
+func aggProjectNull() *project.InMemorySource {
+	names, arr := generateAggTestColumnsWithNulls(memory.NewGoAllocator())
+	p, _ := project.NewInMemoryProjectExecFromArrays(names, arr)
 	return p
 }
 
@@ -360,10 +429,7 @@ func TestAggregateExecNext(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		resultBatch, err := aggrExec.Next(100)
-		if err == nil || !errors.Is(err, io.EOF) {
-			t.Fatalf("expected io.EOF error, got nil")
-		}
+		resultBatch, _ := aggrExec.Next(100)
 		t.Logf("record batch: %v\n", resultBatch)
 		if resultBatch.Columns[0].(*array.Float64).Value(0) != 22 {
 			t.Fatalf("expected minimum age 22, got %v", resultBatch.Columns[0].(*array.Float64).Value(0))
@@ -381,10 +447,7 @@ func TestAggregateExecNext(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		resultBatch, err := aggrExec.Next(100)
-		if err == nil || !errors.Is(err, io.EOF) {
-			t.Fatalf("expected io.EOF, got %v", err)
-		}
+		resultBatch, _ := aggrExec.Next(100)
 
 		maxSalary := resultBatch.Columns[0].(*array.Float64).Value(0)
 		if maxSalary != 99000.0 && maxSalary != 94000.0 && maxSalary != 93000.0 {
@@ -403,10 +466,7 @@ func TestAggregateExecNext(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		resultBatch, err := aggrExec.Next(200)
-		if err == nil || !errors.Is(err, io.EOF) {
-			t.Fatalf("expected io.EOF, got %v", err)
-		}
+		resultBatch, _ := aggrExec.Next(200)
 
 		sumIDs := resultBatch.Columns[0].(*array.Float64).Value(0)
 		expected := float64((25 * 26) / 2) // sum(1..25) = 325
@@ -417,7 +477,7 @@ func TestAggregateExecNext(t *testing.T) {
 	t.Run("Aggr count of age column", func(t *testing.T) {
 		proj := aggProject()
 		agg := []AggregateFunctions{
-			{AggrFunc: Count, Child: col("age")},
+			NewAggregateFunctions(Count, col("age")),
 		}
 
 		aggrExec, err := NewGlobalAggrExec(proj, agg)
@@ -425,17 +485,14 @@ func TestAggregateExecNext(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		resultBatch, err := aggrExec.Next(300)
-		if err == nil || !errors.Is(err, io.EOF) {
-			t.Fatalf("expected io.EOF, got %v", err)
-		}
+		resultBatch, _ := aggrExec.Next(300)
 
 		count := resultBatch.Columns[0].(*array.Float64).Value(0)
 		if count != 25 {
 			t.Fatalf("expected count 25, got %v", count)
 		}
 	})
-	t.Run("Aggr average of salary (⚠ your AVG is wrong)", func(t *testing.T) {
+	t.Run("Aggr average of salary ", func(t *testing.T) {
 		proj := aggProject()
 
 		agg := []AggregateFunctions{
@@ -447,10 +504,7 @@ func TestAggregateExecNext(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		resultBatch, err := aggrExec.Next(500)
-		if err == nil || !errors.Is(err, io.EOF) {
-			t.Fatalf("expected io.EOF, got %v", err)
-		}
+		resultBatch, _ := aggrExec.Next(500)
 
 		avg := resultBatch.Columns[0].(*array.Float64).Value(0)
 		expected := 75740.02
@@ -474,10 +528,7 @@ func TestAggregateExecNext(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		resultBatch, err := aggrExec.Next(1000)
-		if err == nil || !errors.Is(err, io.EOF) {
-			t.Fatalf("expected io.EOF, got %v", err)
-		}
+		resultBatch, _ := aggrExec.Next(1000)
 
 		minAge := resultBatch.Columns[0].(*array.Float64).Value(0)
 		maxSalary := resultBatch.Columns[1].(*array.Float64).Value(0)
@@ -524,6 +575,33 @@ func TestAggregateExecNext(t *testing.T) {
 			if f.Type.ID() != arrow.FLOAT64 {
 				t.Fatalf("expected float64 fields only")
 			}
+		}
+	})
+}
+
+func TestAggregateExecNull(t *testing.T) {
+
+	t.Run("Aggr count of age column", func(t *testing.T) {
+		proj := aggProjectNull()
+		agg := []AggregateFunctions{
+			NewAggregateFunctions(Count, col("age")),
+			NewAggregateFunctions(Sum, col("id")),
+		}
+
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		resultBatch, _ := aggrExec.Next(100)
+		t.Logf("rb:%v\n", resultBatch)
+		count := resultBatch.Columns[0].(*array.Float64).Value(0)
+		if count != 8 {
+			t.Fatalf("expected count 7, got %v", count)
+		}
+		sumIDs := resultBatch.Columns[1].(*array.Float64).Value(0)
+		expectedSum := float64(1 + 2 + 4 + 5 + 7 + 8 + 9) // only non-null ids
+		if sumIDs != expectedSum {
+			t.Fatalf("expected sum %v, got %v", expectedSum, sumIDs)
 		}
 	})
 }

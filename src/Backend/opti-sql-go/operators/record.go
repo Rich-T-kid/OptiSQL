@@ -129,6 +129,7 @@ func (rb *RecordBatch) ColumnByName(name string) (arrow.Array, error) {
 	}
 	return rb.Columns[indices[0]], nil
 }
+
 func (rbb *RecordBatchBuilder) GenIntArray(values ...int) arrow.Array {
 	mem := memory.NewGoAllocator()
 	builder := array.NewInt32Builder(mem)
@@ -288,4 +289,116 @@ func (rbb *RecordBatchBuilder) GenLargeBinaryArray(values ...[]byte) arrow.Array
 		builder.Append(v)
 	}
 	return builder.NewArray()
+}
+
+func (rb *RecordBatch) PrettyPrint() string {
+	if rb == nil {
+		return "<nil RecordBatch>"
+	}
+
+	// -------------------------------
+	// 1. Extract column names
+	// -------------------------------
+	colNames := make([]string, len(rb.Schema.Fields()))
+	for i, f := range rb.Schema.Fields() {
+		colNames[i] = f.Name
+	}
+
+	// -------------------------------
+	// 2. Extract rows into [][]string
+	// -------------------------------
+	rows := make([][]string, rb.RowCount)
+	for r := 0; r < int(rb.RowCount); r++ {
+		row := make([]string, len(rb.Columns))
+		for c, arr := range rb.Columns {
+			row[c] = formatValue(arr, r)
+		}
+		rows[r] = row
+	}
+
+	// -------------------------------
+	// 3. Compute column widths
+	// -------------------------------
+	colWidths := make([]int, len(colNames))
+	for i, name := range colNames {
+		colWidths[i] = len(name)
+	}
+	for _, row := range rows {
+		for i, v := range row {
+			if len(v) > colWidths[i] {
+				colWidths[i] = len(v)
+			}
+		}
+	}
+
+	// -------------------------------
+	// 4. Build horizontal border line
+	// -------------------------------
+	border := "+"
+	for _, w := range colWidths {
+		border += strings.Repeat("-", w+2) + "+"
+	}
+
+	// -------------------------------
+	// 5. Build the final output
+	// -------------------------------
+	var b strings.Builder
+
+	b.WriteString(border + "\n")
+
+	// Header
+	b.WriteString("|")
+	for i, name := range colNames {
+		b.WriteString(" " + padRight(name, colWidths[i]) + " |")
+	}
+	b.WriteString("\n")
+
+	b.WriteString(border + "\n")
+
+	// Rows
+	for _, row := range rows {
+		b.WriteString("|")
+		for i, v := range row {
+			b.WriteString(" " + padRight(v, colWidths[i]) + " |")
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(border)
+
+	return b.String()
+}
+
+// -------------------------------
+// Helper Functions
+// -------------------------------
+
+func padRight(s string, width int) string {
+	if len(s) >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-len(s))
+}
+
+func formatValue(arr arrow.Array, row int) string {
+	if arr.IsNull(row) {
+		return "NULL"
+	}
+
+	switch col := arr.(type) {
+	case *array.Int32:
+		return fmt.Sprintf("%d", col.Value(row))
+	case *array.Int64:
+		return fmt.Sprintf("%d", col.Value(row))
+	case *array.Float32:
+		return fmt.Sprintf("%g", col.Value(row))
+	case *array.Float64:
+		return fmt.Sprintf("%g", col.Value(row))
+	case *array.String:
+		return col.Value(row)
+	case *array.Boolean:
+		return fmt.Sprintf("%t", col.Value(row))
+	default:
+		return "<unsupported>"
+	}
 }
