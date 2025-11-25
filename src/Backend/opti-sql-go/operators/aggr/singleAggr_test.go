@@ -82,7 +82,7 @@ func TestNewAggrExec(t *testing.T) {
 			{AggrFunc: Min, Child: col("age")},
 		}
 
-		exec, err := NewAggrExec(child, agg)
+		exec, err := NewGlobalAggrExec(child, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -108,7 +108,7 @@ func TestNewAggrExec(t *testing.T) {
 			{AggrFunc: Avg, Child: col("age")},
 		}
 
-		exec, err := NewAggrExec(child, agg)
+		exec, err := NewGlobalAggrExec(child, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -136,7 +136,7 @@ func TestNewAggrExec(t *testing.T) {
 			{AggrFunc: Min, Child: col("name")}, // "name" is string → invalid
 		}
 
-		_, err := NewAggrExec(child, agg)
+		_, err := NewGlobalAggrExec(child, agg)
 		if err == nil {
 			t.Fatalf("expected type error, got nil")
 		}
@@ -151,7 +151,7 @@ func TestNewAggrExec(t *testing.T) {
 			{AggrFunc: 9999, Child: col("age")},
 		}
 
-		_, err := NewAggrExec(child, agg)
+		_, err := NewGlobalAggrExec(child, agg)
 		if err == nil {
 			t.Fatalf("expected unsupported aggr error")
 		}
@@ -169,7 +169,7 @@ func TestNewAggrExec(t *testing.T) {
 			{AggrFunc: Count, Child: col("age")},
 		}
 
-		exec, err := NewAggrExec(child, agg)
+		exec, err := NewGlobalAggrExec(child, agg)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -242,7 +242,7 @@ func TestNewAggrExec(t *testing.T) {
 				{AggrFunc: Sum, Child: col(fieldNames[i])},
 			}
 
-			_, err := NewAggrExec(src, agg)
+			_, err := NewGlobalAggrExec(src, agg)
 			if err != nil {
 				t.Fatalf("unexpected error for type %s: %v", validTypes[i], err)
 			}
@@ -342,7 +342,7 @@ func TestAggregateExecNext(t *testing.T) {
 		proj := aggProject()
 		agg := []AggregateFunctions{
 			{AggrFunc: Min, Child: col("id")}}
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -356,7 +356,7 @@ func TestAggregateExecNext(t *testing.T) {
 		proj := aggProject()
 		agg := []AggregateFunctions{
 			{AggrFunc: Min, Child: col("age")}}
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -376,7 +376,7 @@ func TestAggregateExecNext(t *testing.T) {
 			{AggrFunc: Max, Child: col("salary")},
 		}
 
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -398,7 +398,7 @@ func TestAggregateExecNext(t *testing.T) {
 			{AggrFunc: Sum, Child: col("id")},
 		}
 
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -420,7 +420,7 @@ func TestAggregateExecNext(t *testing.T) {
 			{AggrFunc: Count, Child: col("age")},
 		}
 
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -442,7 +442,7 @@ func TestAggregateExecNext(t *testing.T) {
 			{AggrFunc: Avg, Child: col("salary")},
 		}
 
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -469,7 +469,7 @@ func TestAggregateExecNext(t *testing.T) {
 			{AggrFunc: Count, Child: col("id")},
 		}
 
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -504,7 +504,7 @@ func TestAggregateExecNext(t *testing.T) {
 			{AggrFunc: Count, Child: col("salary")},
 		}
 
-		aggrExec, err := NewAggrExec(proj, agg)
+		aggrExec, err := NewGlobalAggrExec(proj, agg)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}

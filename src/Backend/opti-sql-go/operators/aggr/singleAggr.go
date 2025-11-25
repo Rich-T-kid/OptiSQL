@@ -49,6 +49,13 @@ var (
 // Avg
 
 // for now just focus on single-column aggregation without group by
+func NewAggregateFunctions(aggrFunc AggrFunc, child Expr.Expression) AggregateFunctions {
+	return AggregateFunctions{
+		AggrFunc: aggrFunc,
+		Child:    child,
+	}
+}
+
 type AggregateFunctions struct {
 	AggrFunc AggrFunc        // switch to deal with seperate aggregation functions
 	Child    Expr.Expression // resolves to a column generally
@@ -147,7 +154,7 @@ type AggrExec struct {
 	done           bool                 // know when to return io.EOF
 }
 
-func NewAggrExec(child operators.Operator, aggExprs []AggregateFunctions) (*AggrExec, error) {
+func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) (*AggrExec, error) {
 	accs := make([]Accumulator, len(aggExprs))
 	fields := make([]arrow.Field, len(aggExprs))
 	for i, agg := range aggExprs {
@@ -220,8 +227,8 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 			}
 			valueArray := agrArray.(*array.Float64)
 			accumulator := a.accumulators[i]
-			for i := 0; i < valueArray.Len(); i++ {
-				accumulator.Update(valueArray.Value(i))
+			for j := 0; j < valueArray.Len(); j++ {
+				accumulator.Update(valueArray.Value(j))
 			}
 
 		}
@@ -231,6 +238,7 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 	for i := range a.accumulators {
 		resultColumns[i] = operators.NewRecordBatchBuilder().GenFloatArray(a.accumulators[i].Finalize())
 	}
+	a.done = true
 	return &operators.RecordBatch{
 		Schema:   a.schema,
 		Columns:  resultColumns,
@@ -263,4 +271,20 @@ func castArrayToFloat64(arr arrow.Array) (arrow.Array, error) {
 	}
 
 	return outDatum, nil
+}
+func aggrToString(t int) string {
+	switch AggrFunc(t) {
+	case Min:
+		return "MIN"
+	case Max:
+		return "MAX"
+	case Count:
+		return "COUNT"
+	case Sum:
+		return "SUM"
+	case Avg:
+		return "AVG"
+	default:
+		return "UNKNOWN_AGGREGATE_FUNCTION"
+	}
 }
