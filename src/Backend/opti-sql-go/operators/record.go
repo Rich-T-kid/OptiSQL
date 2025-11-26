@@ -290,6 +290,13 @@ func (rbb *RecordBatchBuilder) GenLargeBinaryArray(values ...[]byte) arrow.Array
 	}
 	return builder.NewArray()
 }
+func ReleaseArrays(a []arrow.Array) {
+	for _, col := range a {
+		if col != nil {
+			col.Release()
+		}
+	}
+}
 
 func (rb *RecordBatch) PrettyPrint() string {
 	if rb == nil {

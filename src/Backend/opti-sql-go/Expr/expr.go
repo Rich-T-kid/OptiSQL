@@ -387,7 +387,6 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	}
 	rightArr, err := EvalExpression(b.Right, batch)
 	if err != nil {
-		fmt.Printf("right side evaluation failed with %v", err)
 		return nil, err
 	}
 	opt := compute.ArithmeticOptions{}
@@ -496,7 +495,6 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 		return unpackDatum(datum)
 	case Like:
 		if leftArr.DataType() != arrow.BinaryTypes.String || rightArr.DataType() != arrow.BinaryTypes.String {
-			// regEx runs only on strings
 			return nil, errors.New("binary operator Like only works on arrays of strings")
 		}
 		var compiledRegEx = compileSqlRegEx(rightArr.ValueStr(0))
@@ -504,7 +502,6 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 		leftStrArray := leftArr.(*array.String)
 		for i := 0; i < leftStrArray.Len(); i++ {
 			valid := validRegEx(leftStrArray.Value(i), compiledRegEx)
-			fmt.Printf("does %s match %s: %v\n", leftStrArray.Value(i), compiledRegEx, valid)
 			filterBuilder.Append(valid)
 		}
 		return filterBuilder.NewArray(), nil
