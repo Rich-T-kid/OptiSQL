@@ -387,6 +387,7 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	}
 	rightArr, err := EvalExpression(b.Right, batch)
 	if err != nil {
+		fmt.Printf("right side evaluation failed with %v", err)
 		return nil, err
 	}
 	opt := compute.ArithmeticOptions{}

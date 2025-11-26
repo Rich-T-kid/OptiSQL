@@ -212,7 +212,6 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	for {
 		childBatch, err := a.child.Next(n)
-		fmt.Printf("child batch: %v\n", childBatch)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break

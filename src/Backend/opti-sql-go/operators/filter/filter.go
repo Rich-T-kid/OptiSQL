@@ -55,7 +55,7 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	filteredCol := make([]arrow.Array, len(batch.Columns))
 	for i, col := range batch.Columns {
-		filteredCol[i], err = applyBooleanMask(col, boolArr)
+		filteredCol[i], err = ApplyBooleanMask(col, boolArr)
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +80,7 @@ func (f *FilterExec) Close() error {
 	return f.input.Close()
 }
 
-func applyBooleanMask(col arrow.Array, mask *array.Boolean) (arrow.Array, error) {
+func ApplyBooleanMask(col arrow.Array, mask *array.Boolean) (arrow.Array, error) {
 	datum, err := compute.Filter(
 		context.TODO(),
 		compute.NewDatum(col),

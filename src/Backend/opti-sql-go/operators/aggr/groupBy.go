@@ -107,7 +107,6 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 				}
 			}
 			key := strings.Join(keyParts, "|")
-			fmt.Printf("key: %v\n", key)
 			// Allocate accumulator list if new group
 			if _, exists := g.groups[key]; !exists {
 				g.groups[key] = make([]accumulator, len(g.groupExpr))
@@ -132,7 +131,7 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 	batch := buildGroupByOutput(g)
 
 	g.done = true
-	return batch, io.EOF
+	return batch, nil
 }
 
 func (g *GroupByExec) Schema() *arrow.Schema {
@@ -224,7 +223,6 @@ func buildGroupByOutput(g *GroupByExec) *operators.RecordBatch {
 
 	rowCount := len(g.groups)
 	if rowCount == 0 {
-		// return empty batch (0 groups)
 		return &operators.RecordBatch{
 			Schema:   g.schema,
 			Columns:  []arrow.Array{},
