@@ -41,11 +41,11 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if f.done {
 		return nil, io.EOF
 	}
-	batch, err := f.input.Next(n)
+	childBatch, err := f.input.Next(n)
 	if err != nil {
 		return nil, err
 	}
-	booleanMask, err := Expr.EvalExpression(f.predicate, batch)
+	booleanMask, err := Expr.EvalExpression(f.predicate, childBatch)
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +53,8 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if !ok {
 		return nil, errors.New("predicate did not evaluate to boolean array")
 	}
-	filteredCol := make([]arrow.Array, len(batch.Columns))
-	for i, col := range batch.Columns {
+	filteredCol := make([]arrow.Array, len(childBatch.Columns))
+	for i, col := range childBatch.Columns {
 		filteredCol[i], err = ApplyBooleanMask(col, boolArr)
 		if err != nil {
 			return nil, err
@@ -62,11 +62,11 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	booleanMask.Release()
 	// release old columns
-	operators.ReleaseArrays(batch.Columns)
+	operators.ReleaseArrays(childBatch.Columns)
 	size := uint64(filteredCol[0].Len())
 
 	return &operators.RecordBatch{
-		Schema:   batch.Schema,
+		Schema:   childBatch.Schema,
 		Columns:  filteredCol,
 		RowCount: size,
 	}, nil

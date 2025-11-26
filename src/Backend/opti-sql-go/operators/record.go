@@ -24,7 +24,7 @@ type Operator interface {
 type RecordBatch struct {
 	Schema   *arrow.Schema
 	Columns  []arrow.Array
-	RowCount uint64 // TODO: update to actually use this, in all operators
+	RowCount uint64 //
 }
 
 type SchemaBuilder struct {
