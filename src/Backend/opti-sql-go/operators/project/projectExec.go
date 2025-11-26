@@ -94,9 +94,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 		outPutCols[i] = arr
 		arr.Retain()
 	}
-	for _, c := range childBatch.Columns {
-		c.Release()
-	}
+	operators.ReleaseArrays(childBatch.Columns)
 	return &operators.RecordBatch{
 		Schema:   &p.outputschema,
 		Columns:  outPutCols,
