@@ -16,8 +16,6 @@ var (
 	_ = (operators.Operator)(&HavingExec{})
 )
 
-type HavingClone = filter.FilterExec
-
 type HavingExec struct {
 	input  operators.Operator
 	schema *arrow.Schema
@@ -41,6 +39,9 @@ func (h *HavingExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	batch, err := h.input.Next(n)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			h.done = true
+		}
 		return nil, err
 	}
 	booleanMask, err := Expr.EvalExpression(h.havingExpr, batch)
@@ -49,7 +50,7 @@ func (h *HavingExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	boolArr, ok := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
 	if !ok {
-		return nil, errors.New("predicate did not evaluate to boolean array")
+		return nil, errors.New("having predicate did not evaluate to boolean array")
 	}
 	filteredCol := make([]arrow.Array, len(batch.Columns))
 	for i, col := range batch.Columns {

@@ -8,9 +8,9 @@ import (
 	"opti-sql-go/operators"
 	"strings"
 
-	"github.com/apache/arrow/go/v15/arrow/memory"
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
+	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
 /*
@@ -156,7 +156,7 @@ func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression
 		fields = append(fields, arrow.Field{
 			Name:     fmt.Sprintf("group_%s", expr.String()),
 			Type:     dt,
-			Nullable: false,
+			Nullable: true,
 		})
 	}
 
@@ -208,9 +208,9 @@ func createAccumulator(fn AggrFunc) accumulator {
 	case Max:
 		return newMaxAggr()
 	case Sum:
-		return NewSumAggr()
+		return newSumAggr()
 	case Count:
-		return NewCountAggr()
+		return newCountAggr()
 	case Avg:
 		return newAvgAggr()
 	default:
@@ -244,8 +244,6 @@ func buildGroupByOutput(g *GroupByExec) *operators.RecordBatch {
 		aggrCols[i] = make([]float64, 0, rowCount)
 	}
 
-	// Iterate groups in stable order
-	i := 0
 	for key, accs := range g.groups {
 		// Add group-by (dimension) values
 		dims := g.keys[key]
@@ -258,7 +256,6 @@ func buildGroupByOutput(g *GroupByExec) *operators.RecordBatch {
 			aggrCols[j] = append(aggrCols[j], acc.Finalize())
 		}
 
-		i++
 	}
 
 	// Now build Arrow arrays in correct schema order

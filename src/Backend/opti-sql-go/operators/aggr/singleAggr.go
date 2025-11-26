@@ -34,11 +34,11 @@ const (
 )
 
 var (
-	_ = (accumulator)(&MinAggrAccumulator{})
-	_ = (accumulator)(&MaxAggrAccumulator{})
-	_ = (accumulator)(&CountAggrAccumulator{})
-	_ = (accumulator)(&SumAggrAccumulator{})
-	_ = (accumulator)(&AvgAggrAccumulator{})
+	_ = (accumulator)(&minAggrAccumulator{})
+	_ = (accumulator)(&maxAggrAccumulator{})
+	_ = (accumulator)(&countAggrAccumulator{})
+	_ = (accumulator)(&sumAggrAccumulator{})
+	_ = (accumulator)(&avgAggrAccumulator{})
 	_ = (operators.Operator)(&AggrExec{})
 )
 
@@ -59,15 +59,15 @@ type accumulator interface {
 }
 
 func newMinAggr() accumulator {
-	return &MinAggrAccumulator{}
+	return &minAggrAccumulator{}
 }
 
-type MinAggrAccumulator struct {
+type minAggrAccumulator struct {
 	minV       float64
 	firstValue bool
 }
 
-func (m *MinAggrAccumulator) Update(value float64) {
+func (m *minAggrAccumulator) Update(value float64) {
 	if !m.firstValue {
 		m.minV = value
 		m.firstValue = true
@@ -76,17 +76,17 @@ func (m *MinAggrAccumulator) Update(value float64) {
 	m.minV = min(m.minV, value)
 
 }
-func (m *MinAggrAccumulator) Finalize() float64 { return m.minV }
+func (m *minAggrAccumulator) Finalize() float64 { return m.minV }
 func newMaxAggr() accumulator {
-	return &MaxAggrAccumulator{}
+	return &maxAggrAccumulator{}
 }
 
-type MaxAggrAccumulator struct {
+type maxAggrAccumulator struct {
 	maxV       float64
 	firstValue bool
 }
 
-func (m *MaxAggrAccumulator) Update(value float64) {
+func (m *maxAggrAccumulator) Update(value float64) {
 	if !m.firstValue {
 		m.maxV = value
 		m.firstValue = true
@@ -94,49 +94,49 @@ func (m *MaxAggrAccumulator) Update(value float64) {
 	}
 	m.maxV = max(m.maxV, value)
 }
-func (m *MaxAggrAccumulator) Finalize() float64 { return m.maxV }
+func (m *maxAggrAccumulator) Finalize() float64 { return m.maxV }
 
-func NewCountAggr() accumulator {
-	return &CountAggrAccumulator{}
+func newCountAggr() accumulator {
+	return &countAggrAccumulator{}
 }
 
-type CountAggrAccumulator struct {
+type countAggrAccumulator struct {
 	count float64
 }
 
-func (c *CountAggrAccumulator) Update(_ float64) {
+func (c *countAggrAccumulator) Update(_ float64) {
 	c.count++
 }
-func (c *CountAggrAccumulator) Finalize() float64 { return c.count }
+func (c *countAggrAccumulator) Finalize() float64 { return c.count }
 
-func NewSumAggr() accumulator {
-	return &SumAggrAccumulator{}
+func newSumAggr() accumulator {
+	return &sumAggrAccumulator{}
 }
 
-type SumAggrAccumulator struct {
+type sumAggrAccumulator struct {
 	summation float64
 }
 
-func (s *SumAggrAccumulator) Update(value float64) {
+func (s *sumAggrAccumulator) Update(value float64) {
 	s.summation += value
 }
-func (s *SumAggrAccumulator) Finalize() float64 { return s.summation }
+func (s *sumAggrAccumulator) Finalize() float64 { return s.summation }
 func newAvgAggr() accumulator {
-	return &AvgAggrAccumulator{}
+	return &avgAggrAccumulator{}
 }
 
-type AvgAggrAccumulator struct {
+type avgAggrAccumulator struct {
 	used   bool
 	values float64
 	count  float64
 }
 
-func (a *AvgAggrAccumulator) Update(value float64) {
+func (a *avgAggrAccumulator) Update(value float64) {
 	a.used = true
 	a.values += value
 	a.count++
 }
-func (a *AvgAggrAccumulator) Finalize() float64 {
+func (a *avgAggrAccumulator) Finalize() float64 {
 	// handles divide by zero
 	if !a.used {
 		return 0.0
@@ -174,10 +174,10 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 			accs[i] = newMaxAggr()
 		case Count:
 			fieldName = fmt.Sprintf("count_%s", agg.Child.String())
-			accs[i] = NewCountAggr()
+			accs[i] = newCountAggr()
 		case Sum:
 			fieldName = fmt.Sprintf("sum_%s", agg.Child.String())
-			accs[i] = NewSumAggr()
+			accs[i] = newSumAggr()
 		case Avg:
 			fieldName = fmt.Sprintf("avg_%s", agg.Child.String())
 			accs[i] = newAvgAggr()
@@ -199,13 +199,9 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 	}, nil
 }
 
-// check for io.EOF with flag
-// read in all record batches
-// for each batch, run Expr.Evaluate, to get the column you want for the expression (cast to float64)
-//
-//	for each element of that column grab the values you want using the accumulator interface
-//
-// build output batch, for now its just 1 of everything straight forward
+// Next consumes all batches from the child operator, evaluates the aggregate expressions,
+// updates the accumulators for each value, and returns a single output batch containing
+// the final aggregation results. It returns io.EOF after producing the result batch.
 func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if a.done {
 		return nil, io.EOF
@@ -249,7 +245,6 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 		Columns:  resultColumns,
 		RowCount: 1,
 	}, nil
-	// this is a pipeline breaker so it will always consume all of the input which means this needs to return an io.EOF
 }
 
 func (a *AggrExec) Schema() *arrow.Schema {
