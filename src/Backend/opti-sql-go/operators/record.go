@@ -24,7 +24,7 @@ type Operator interface {
 type RecordBatch struct {
 	Schema   *arrow.Schema
 	Columns  []arrow.Array
-	RowCount uint64 // TODO: update to actually use this, in all operators
+	RowCount uint64 //
 }
 
 type SchemaBuilder struct {
@@ -289,6 +289,13 @@ func (rbb *RecordBatchBuilder) GenLargeBinaryArray(values ...[]byte) arrow.Array
 		builder.Append(v)
 	}
 	return builder.NewArray()
+}
+func ReleaseArrays(a []arrow.Array) {
+	for _, col := range a {
+		if col != nil {
+			col.Release()
+		}
+	}
 }
 
 func (rb *RecordBatch) PrettyPrint() string {

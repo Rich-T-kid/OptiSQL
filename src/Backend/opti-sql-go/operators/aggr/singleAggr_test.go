@@ -130,7 +130,6 @@ func aggProject() *project.InMemorySource {
 	return p
 }
 
-// TODO: add test that check for null
 func aggProjectNull() *project.InMemorySource {
 	names, arr := generateAggTestColumnsWithNulls(memory.NewGoAllocator())
 	p, _ := project.NewInMemoryProjectExecFromArrays(names, arr)

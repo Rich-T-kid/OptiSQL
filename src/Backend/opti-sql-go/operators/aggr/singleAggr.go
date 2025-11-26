@@ -233,6 +233,7 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 			}
 
 		}
+		operators.ReleaseArrays(childBatch.Columns)
 	}
 	// build array with just the result of the column
 	resultColumns := make([]arrow.Array, len(a.accumulators))

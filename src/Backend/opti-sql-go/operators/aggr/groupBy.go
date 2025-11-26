@@ -75,6 +75,8 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 		for i, expr := range g.groupByExpr {
 			arr, err := Expr.EvalExpression(expr, childBatch)
 			if err != nil {
+				operators.ReleaseArrays(groupArrays)
+				operators.ReleaseArrays(childBatch.Columns)
 				return nil, err
 			}
 			groupArrays[i] = arr
@@ -85,10 +87,16 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 		for i, agg := range g.groupExpr {
 			arr, err := Expr.EvalExpression(agg.Child, childBatch)
 			if err != nil {
+				operators.ReleaseArrays(aggrArrays)
+				operators.ReleaseArrays(groupArrays)
+				operators.ReleaseArrays(childBatch.Columns)
 				return nil, err
 			}
 			arr, err = castArrayToFloat64(arr)
 			if err != nil {
+				operators.ReleaseArrays(aggrArrays)
+				operators.ReleaseArrays(groupArrays)
+				operators.ReleaseArrays(childBatch.Columns)
 				return nil, err
 			}
 			aggrArrays[i] = arr
@@ -125,6 +133,10 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 				g.groups[key][i].Update(val)
 			}
 		}
+		// 4. release temp arrays
+		operators.ReleaseArrays(aggrArrays)
+		operators.ReleaseArrays(groupArrays)
+		operators.ReleaseArrays(childBatch.Columns)
 	}
 
 	// 4. Build output RecordBatch

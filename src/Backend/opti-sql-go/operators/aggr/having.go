@@ -60,9 +60,7 @@ func (h *HavingExec) Next(n uint16) (*operators.RecordBatch, error) {
 		}
 	}
 	// release old columns
-	for _, c := range batch.Columns {
-		c.Release()
-	}
+	operators.ReleaseArrays(batch.Columns)
 	size := uint64(filteredCol[0].Len())
 
 	return &operators.RecordBatch{
