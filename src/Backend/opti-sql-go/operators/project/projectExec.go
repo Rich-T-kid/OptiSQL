@@ -20,7 +20,7 @@ var (
 )
 
 type ProjectExec struct {
-	child        operators.Operator
+	input        operators.Operator
 	outputschema arrow.Schema
 	expr         []Expr.Expression
 	done         bool
@@ -60,7 +60,7 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 	outputschema := arrow.NewSchema(fields, nil)
 	// return new exec
 	return &ProjectExec{
-		child:        input,
+		input:        input,
 		outputschema: *outputschema,
 		expr:         exprs,
 	}, nil
@@ -73,7 +73,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 		return nil, io.EOF
 	}
 
-	childBatch, err := p.child.Next(n)
+	childBatch, err := p.input.Next(n)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}, nil
 }
 func (p *ProjectExec) Close() error {
-	return p.child.Close()
+	return p.input.Close()
 }
 func (p *ProjectExec) Schema() *arrow.Schema {
 	return &p.outputschema

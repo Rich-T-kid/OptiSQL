@@ -25,7 +25,7 @@ var (
 
 // place all unique elements of the group by column into a hash table, each element gets their own Accumulator instance
 type GroupByExec struct {
-	child       operators.Operator
+	input       operators.Operator
 	schema      *arrow.Schema
 	groupExpr   []AggregateFunctions
 	groupByExpr []Expr.Expression // column names
@@ -42,7 +42,7 @@ func NewGroupByExec(child operators.Operator, groupExpr []AggregateFunctions, gr
 	}
 
 	return &GroupByExec{
-		child:       child,
+		input:       child,
 		schema:      s,
 		groupExpr:   groupExpr,
 		groupByExpr: groupBy,
@@ -60,7 +60,7 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 	}
 
 	for {
-		childBatch, err := g.child.Next(batchSize)
+		childBatch, err := g.input.Next(batchSize)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -150,7 +150,7 @@ func (g *GroupByExec) Schema() *arrow.Schema {
 	return g.schema
 }
 func (g *GroupByExec) Close() error {
-	return g.child.Close()
+	return g.input.Close()
 }
 
 // handles validation and building of schema for group by

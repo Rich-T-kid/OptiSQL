@@ -149,7 +149,7 @@ func (a *avgAggrAccumulator) Finalize() float64 {
 // ===================
 // handles global aggregations without group by
 type AggrExec struct {
-	child          operators.Operator   // child operator
+	input          operators.Operator   // child operator
 	schema         *arrow.Schema        // output schema
 	aggExpressions []AggregateFunctions // list of wanted aggregate expressions
 	accumulators   []accumulator        // list of accumulators corresponding to aggExpressions, these will actually work to compute the aggregation
@@ -192,7 +192,7 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 		}
 	}
 	return &AggrExec{
-		child:          child,
+		input:          child,
 		schema:         arrow.NewSchema(fields, nil),
 		aggExpressions: aggExprs,
 		accumulators:   accs,
@@ -207,7 +207,7 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 		return nil, io.EOF
 	}
 	for {
-		childBatch, err := a.child.Next(n)
+		childBatch, err := a.input.Next(n)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -252,7 +252,7 @@ func (a *AggrExec) Schema() *arrow.Schema {
 	return a.schema
 }
 func (a *AggrExec) Close() error {
-	return a.child.Close()
+	return a.input.Close()
 }
 
 func validAggrType(dt arrow.DataType) bool {
