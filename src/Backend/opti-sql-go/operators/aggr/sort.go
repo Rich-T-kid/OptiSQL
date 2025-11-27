@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
 	"sort"
@@ -53,8 +54,13 @@ func CombineSortKeys(sk ...*SortKey) []SortKey {
 type SortExec struct {
 	child    operators.Operator
 	schema   *arrow.Schema
-	done     bool
 	sortKeys []SortKey // resolves to columns
+	// internal book keeping
+	totalColumns   []arrow.Array
+	consumedOffset uint64
+	totalRows      uint64
+	consumed       bool // did we finish reading all of the child record batches?
+	done           bool // have we already produced all the sorted record batches?
 }
 
 func NewSortExec(child operators.Operator, sortKeys []SortKey) (*SortExec, error) {
@@ -67,59 +73,80 @@ func NewSortExec(child operators.Operator, sortKeys []SortKey) (*SortExec, error
 }
 
 // for now read everything into memory and sort -- next steps will be to do external merge
+
+// n is the number of records we will return,sortExec will read in 2^16-1 column entries from its child, this is more efficient that trusting the caller to pass in a reasonable
+// n so that we avoid small/frequent IO operations
 func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if s.done {
 		return nil, io.EOF
 	}
-	allColumns := make([]arrow.Array, len(s.schema.Fields())) // concated columns
-	mem := memory.NewGoAllocator()
-	fmt.Printf("all columns init %v\n", allColumns)
-	var count uint64
-	for {
-		childBatch, err := s.child.Next(n)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
+	if !s.consumed {
+		allColumns := make([]arrow.Array, len(s.schema.Fields())) // concated columns
+		mem := memory.NewGoAllocator()
+		var count uint64
+		for {
+			childBatch, err := s.child.Next(math.MaxUint16)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				return nil, err
 			}
+			for i := range childBatch.Columns {
+				if allColumns[i] == nil {
+					allColumns[i] = childBatch.Columns[i]
+					continue
+				}
+				largerArray, err := array.Concatenate([]arrow.Array{allColumns[i], childBatch.Columns[i]}, mem)
+				if err != nil {
+					return nil, err
+				}
+				allColumns[i] = largerArray
+			}
+		}
+		s.consumed = true
+		if len(allColumns) > 0 {
+			count = uint64(allColumns[0].Len())
+		}
+		idx, err := sortBatches(&operators.RecordBatch{
+			Schema:   s.schema,
+			Columns:  allColumns,
+			RowCount: count,
+		}, s.sortKeys)
+		if err != nil {
 			return nil, err
 		}
-		for i := range childBatch.Columns {
-			if allColumns[i] == nil {
-				allColumns[i] = childBatch.Columns[i]
-				continue
-			}
-			largerArray, err := concatarr(allColumns[i], childBatch.Columns[i], mem)
+		// now update all mappings
+		for i := range len(allColumns) {
+			arr, err := compute.TakeArray(context.TODO(), allColumns[i], idxToArrowArray(idx, mem))
 			if err != nil {
 				return nil, err
 			}
-			allColumns[i] = largerArray
+			allColumns[i] = arr
 		}
+		s.totalColumns = allColumns
+		s.totalRows = count
 	}
-	if len(allColumns) > 0 {
-		count = uint64(allColumns[0].Len())
+	var readSize uint64
+	remaining := s.totalRows - s.consumedOffset
+	if remaining < uint64(n) {
+		// if n is more than we have left just read up to remaining
+		readSize = uint64(remaining)
+		s.done = true
+	} else {
+		// remaining > n or remaining = n then just read n and return
+		readSize = uint64(n)
 	}
-	idx := sortBatches(&operators.RecordBatch{
-		Schema:   s.schema,
-		Columns:  allColumns,
-		RowCount: count,
-	}, s.sortKeys)
-	// now update all mappings
-	for i := range len(allColumns) {
-		tmpDatum, err := compute.Take(context.TODO(), *compute.DefaultTakeOptions(), compute.NewDatum(allColumns[i]), compute.NewDatum(toDatumFormat(idx, mem)))
-		if err != nil {
-			return nil, err
-		}
-		array, ok := tmpDatum.(*compute.ArrayDatum)
-		if !ok {
-			return nil, fmt.Errorf("non datum was returned from take")
-		}
-		allColumns[i] = array.MakeArray()
+	mem := memory.NewGoAllocator()
+	sortedColumns, err := s.consumeSortedBatch(readSize, mem)
+	if err != nil {
+		return nil, err
 	}
-	// TOOD: break this uo into N chunks
+
 	return &operators.RecordBatch{
 		Schema:   s.schema,
-		Columns:  allColumns,
-		RowCount: count,
+		Columns:  sortedColumns,
+		RowCount: readSize,
 	}, nil
 }
 func (s *SortExec) Schema() *arrow.Schema {
@@ -127,6 +154,22 @@ func (s *SortExec) Schema() *arrow.Schema {
 }
 func (s *SortExec) Close() error {
 	return s.child.Close()
+}
+func (s *SortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]arrow.Array, error) {
+	ctx := context.TODO()
+	resultColumns := make([]arrow.Array, len(s.schema.Fields()))
+	offsetArray := genoffsetTakeIdx(s.consumedOffset, readsize, mem)
+	for i := range s.totalColumns {
+		sortArr := s.totalColumns[i]
+		arr, err := compute.TakeArray(ctx, sortArr, offsetArray)
+		if err != nil {
+			return nil, err
+		}
+		resultColumns[i] = arr
+
+	}
+	s.consumedOffset += readsize
+	return resultColumns, nil
 }
 
 /*
@@ -167,35 +210,21 @@ func (t *TopKSortExec) Close() error {
 /*
 shared functions
 */
-func sortBatches(fullRC *operators.RecordBatch, sortKeys []SortKey) []uint64 {
+func sortBatches(fullRC *operators.RecordBatch, sortKeys []SortKey) ([]uint64, error) {
 	keyColumns := make([]arrow.Array, len(sortKeys))
 	for i, sk := range sortKeys {
 		arr, err := Expr.EvalExpression(sk.Expr, fullRC)
 		if err != nil {
-			panic(fmt.Sprintf("sort batches: failed to eval sort expression: %v", err))
+			return nil, fmt.Errorf("sort batches: failed to eval sort expression: %v", err)
 		}
 		keyColumns[i] = arr
-	}
-	fmt.Printf("columns\n")
-	for i, k := range keyColumns {
-		fmt.Printf("%d:%v\n", i, k)
 	}
 	idVector := make([]uint64, fullRC.RowCount)
 	for i := 0; uint64(i) < fullRC.RowCount; i++ {
 		idVector[i] = uint64(i)
 	}
 	sortIndexVector(idVector, keyColumns, sortKeys)
-	fmt.Printf("old Id Vec:%v\n", idVector)
-	fmt.Printf("new ID vec: %v\n", idVector)
-	return idVector
-}
-func toRC() []arrow.Array {
-	return nil
-}
-
-func concatarr(a arrow.Array, b arrow.Array, mem memory.Allocator) (arrow.Array, error) {
-	return array.Concatenate([]arrow.Array{a, b}, mem)
-
+	return idVector, nil
 }
 
 // sortIndexVector sorts idVec based on keyColumns + sortKeys.
@@ -328,14 +357,20 @@ func compareFloat[T float32 | float64](a, b T) int {
 		return 0
 	}
 }
-func toDatumFormat(v []uint64, mem memory.Allocator) compute.Datum {
+func idxToArrowArray(v []uint64, mem memory.Allocator) arrow.Array {
 	// turn to array first
 	b := array.NewUint64Builder(mem)
-	defer b.Release()
 	for _, val := range v {
 		b.Append(val)
 	}
 	arr := b.NewArray()
-	defer arr.Release()
-	return compute.NewDatum(arr)
+	return arr
+}
+func genoffsetTakeIdx(offset, size uint64, mem memory.Allocator) arrow.Array {
+	b := array.NewUint64Builder(mem)
+	for i := range size {
+		b.Append(offset + i)
+	}
+	arr := b.NewArray()
+	return arr
 }
