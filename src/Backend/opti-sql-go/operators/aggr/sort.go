@@ -52,7 +52,7 @@ func CombineSortKeys(sk ...*SortKey) []SortKey {
 }
 
 type SortExec struct {
-	child    operators.Operator
+	input    operators.Operator
 	schema   *arrow.Schema
 	sortKeys []SortKey // resolves to columns
 	// internal book keeping
@@ -65,7 +65,7 @@ type SortExec struct {
 
 func NewSortExec(child operators.Operator, sortKeys []SortKey) (*SortExec, error) {
 	return &SortExec{
-		child:    child,
+		input:    child,
 		schema:   child.Schema(),
 		sortKeys: sortKeys,
 	}, nil
@@ -84,7 +84,7 @@ func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
 		mem := memory.NewGoAllocator()
 		var count uint64
 		for {
-			childBatch, err := s.child.Next(math.MaxUint16)
+			childBatch, err := s.input.Next(math.MaxUint16)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
@@ -116,8 +116,10 @@ func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
 			return nil, err
 		}
 		// now update all mappings
+		idxArray := idxToArrowArray(idx, mem)
+		defer idxArray.Release()
 		for i := range len(allColumns) {
-			arr, err := compute.TakeArray(context.TODO(), allColumns[i], idxToArrowArray(idx, mem))
+			arr, err := compute.TakeArray(context.TODO(), allColumns[i], idxArray)
 			if err != nil {
 				return nil, err
 			}
@@ -128,6 +130,9 @@ func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	var readSize uint64
 	remaining := s.totalRows - s.consumedOffset
+	if remaining == 0 {
+		return nil, io.EOF
+	}
 	if remaining < uint64(n) {
 		// if n is more than we have left just read up to remaining
 		readSize = uint64(remaining)
@@ -152,12 +157,13 @@ func (s *SortExec) Schema() *arrow.Schema {
 	return s.schema
 }
 func (s *SortExec) Close() error {
-	return s.child.Close()
+	return s.input.Close()
 }
 func (s *SortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]arrow.Array, error) {
 	ctx := context.TODO()
 	resultColumns := make([]arrow.Array, len(s.schema.Fields()))
 	offsetArray := genoffsetTakeIdx(s.consumedOffset, readsize, mem)
+	defer offsetArray.Release()
 	for i := range s.totalColumns {
 		sortArr := s.totalColumns[i]
 		arr, err := compute.TakeArray(ctx, sortArr, offsetArray)
@@ -175,7 +181,7 @@ func (s *SortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]
 only sort and keep the top k elements in memory
 */
 type TopKSortExec struct {
-	child    operators.Operator
+	input    operators.Operator
 	schema   *arrow.Schema
 	sortKeys []SortKey // resolves to columns
 	k        uint16    // top k
@@ -184,15 +190,14 @@ type TopKSortExec struct {
 	heap           []heapRow // at any one point this will only hold k elements
 	totalRows      uint64
 	consumedOffset uint64
-	consumed       bool // did we finish reading all of the child record batches?
+	consumed       bool // did we finish reading all of the input record batches?
 	done           bool
 }
 
 func NewTopKSortExec(child operators.Operator, sortKeys []SortKey, k uint16) (*TopKSortExec, error) {
-	fmt.Printf("k:%v\n", k)
 	size := len(child.Schema().Fields())
 	return &TopKSortExec{
-		child:    child,
+		input:    child,
 		schema:   child.Schema(),
 		sortKeys: sortKeys,
 		k:        k,
@@ -210,7 +215,7 @@ func (t *TopKSortExec) Next(n uint16) (*operators.RecordBatch, error) {
 	mem := memory.NewGoAllocator()
 	if !t.consumed {
 		for {
-			childBatch, err := t.child.Next(math.MaxUint16)
+			childBatch, err := t.input.Next(math.MaxUint16)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					t.consumed = true
@@ -254,12 +259,12 @@ func (t *TopKSortExec) Schema() *arrow.Schema {
 	return t.schema
 }
 func (t *TopKSortExec) Close() error {
-	return t.child.Close()
+	return t.input.Close()
 }
 
 type heapRow struct {
 	rowIdx uint64
-	keys   []interface{} // colummns
+	keys   []interface{} // columns
 }
 
 /*
@@ -272,7 +277,7 @@ func (t *TopKSortExec) UpdateTopKSorted(newBatch *operators.RecordBatch, sortKey
 	for i, sk := range sortKeys {
 		arr, err := Expr.EvalExpression(sk.Expr, newBatch)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		keyCols[i] = arr
 	}
@@ -296,7 +301,6 @@ func (t *TopKSortExec) UpdateTopKSorted(newBatch *operators.RecordBatch, sortKey
 
 	}
 	sortBySortKeys(tmpBuff, sortKeys)
-	fmt.Printf("buff: %v\nTopK:%v\n", tmpBuff, t.k)
 	tk := min(int(t.k), len(tmpBuff)) // in case k > len(tmpBuff)
 	topK := tmpBuff[:tk]
 	var idxArr []uint64
@@ -304,6 +308,7 @@ func (t *TopKSortExec) UpdateTopKSorted(newBatch *operators.RecordBatch, sortKey
 		idxArr = append(idxArr, topK[i].rowIdx)
 	}
 	takeArray := idxToArrowArray(idxArr, mem)
+	defer takeArray.Release()
 	count := newBatch.Schema.NumFields()
 	for i := range count {
 		sc, err := compute.TakeArray(context.Background(), allColumns[i], takeArray)
@@ -345,6 +350,7 @@ func (t *TopKSortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator)
 	ctx := context.TODO()
 	resultColumns := make([]arrow.Array, len(t.schema.Fields()))
 	offsetArray := genoffsetTakeIdx(t.consumedOffset, readsize, mem)
+	defer offsetArray.Release()
 	for i := range t.sortedColumns {
 		sortArr := t.sortedColumns[i]
 		arr, err := compute.TakeArray(ctx, sortArr, offsetArray)
@@ -732,6 +738,7 @@ func comparePrimitive(a, b any) int {
 func idxToArrowArray(v []uint64, mem memory.Allocator) arrow.Array {
 	// turn to array first
 	b := array.NewUint64Builder(mem)
+	defer b.Release()
 	for _, val := range v {
 		b.Append(val)
 	}
@@ -740,9 +747,9 @@ func idxToArrowArray(v []uint64, mem memory.Allocator) arrow.Array {
 }
 func genoffsetTakeIdx(offset, size uint64, mem memory.Allocator) arrow.Array {
 	b := array.NewUint64Builder(mem)
+	defer b.Release()
 	for i := range size {
 		b.Append(offset + i)
 	}
-	arr := b.NewArray()
-	return arr
+	return b.NewArray()
 }

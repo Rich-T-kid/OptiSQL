@@ -2,7 +2,6 @@ package aggr
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators/project"
@@ -37,13 +36,13 @@ func TestSortInit(t *testing.T) {
 	})
 	t.Run("SortKey options", func(t *testing.T) {
 		proj := aggProject()
-		_, err := NewSortExec(proj, []SortKey{*NewSortKey(col("-"), false, false)})
+		_, err := NewSortExec(proj, []SortKey{*NewSortKey(col("id"), false, false)})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 	})
-	t.Run("tok k sort exec init", func(t *testing.T) {
+	t.Run("top k sort exec init", func(t *testing.T) {
 		proj := aggProject()
 		topKVal := 5
 		topK, err := NewTopKSortExec(proj, nil, uint16(topKVal))
@@ -99,7 +98,7 @@ func TestBasicSortExpr(t *testing.T) {
 				}
 				t.Fatalf("unexpected error from sortExec Next : %v\n", err)
 			}
-			fmt.Println(sortedBatch.PrettyPrint())
+			t.Logf("%v\n", sortedBatch.PrettyPrint())
 		}
 	})
 }
@@ -124,7 +123,7 @@ func TestFullSortOverNetwork(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error %v\n", err)
 		}
-		fmt.Println(rc.PrettyPrint())
+		t.Logf("%v\n", rc.PrettyPrint())
 
 	})
 
