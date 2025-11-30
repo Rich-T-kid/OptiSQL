@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"opti-sql-go/Expr"
@@ -17,7 +18,7 @@ import (
 
 var (
 	_ = (operators.Operator)(&LimitExec{})
-	_ = (operators.Operator)(&Distinct{})
+	_ = (operators.Operator)(&DistinctExec{})
 )
 
 type LimitExec struct {
@@ -79,7 +80,7 @@ func (l *LimitExec) Close() error {
 	return l.input.Close()
 }
 
-type Distinct struct {
+type DistinctExec struct {
 	input               operators.Operator
 	schema              *arrow.Schema
 	colExpr             []Expr.Expression   // resolves to column that we want distinct values of
@@ -91,8 +92,11 @@ type Distinct struct {
 	done                bool
 }
 
-func NewDistinctExec(input operators.Operator, colExpr []Expr.Expression) (*Distinct, error) {
-	return &Distinct{
+func NewDistinctExec(input operators.Operator, colExpr []Expr.Expression) (*DistinctExec, error) {
+	if len(colExpr) == 0 {
+		return nil, errors.New("Distinct operator requires at least one column expression")
+	}
+	return &DistinctExec{
 		input:               input,
 		schema:              input.Schema(),
 		colExpr:             colExpr,
@@ -102,7 +106,7 @@ func NewDistinctExec(input operators.Operator, colExpr []Expr.Expression) (*Dist
 }
 
 // pipeline breaker. consume all, if row combonation is already seen, dont include in output
-func (d *Distinct) Next(n uint16) (*operators.RecordBatch, error) {
+func (d *DistinctExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if d.done {
 		return nil, io.EOF
 	}
@@ -113,6 +117,7 @@ func (d *Distinct) Next(n uint16) (*operators.RecordBatch, error) {
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					d.consumedInput = true
+					fmt.Printf("distinctArray: \t%v\n", d.distinctValuesArray)
 					if d.distinctValuesArray[0] != nil { // nill check in case of no distict elements being found or even just input operator doesnt return anything
 						d.totalRows = uint64(d.distinctValuesArray[0].Len())
 					}
@@ -166,6 +171,7 @@ func (d *Distinct) Next(n uint16) (*operators.RecordBatch, error) {
 				if err != nil {
 					return nil, err
 				}
+				//	uniqueElements.Release()
 				d.distinctValuesArray[i] = joinedArray
 			}
 		}
@@ -199,9 +205,12 @@ func (d *Distinct) Next(n uint16) (*operators.RecordBatch, error) {
 		RowCount: rc,
 	}, nil
 }
-func (d *Distinct) Schema() *arrow.Schema { return d.schema }
-func (d *Distinct) Close() error          { return d.input.Close() }
-func (d *Distinct) consumeDistinctArrays(readSize uint64, mem memory.Allocator) ([]arrow.Array, error) {
+func (d *DistinctExec) Schema() *arrow.Schema { return d.schema }
+func (d *DistinctExec) Close() error {
+	operators.ReleaseArrays(d.distinctValuesArray)
+	return d.input.Close()
+}
+func (d *DistinctExec) consumeDistinctArrays(readSize uint64, mem memory.Allocator) ([]arrow.Array, error) {
 	ctx := context.TODO()
 	resultColumns := make([]arrow.Array, len(d.schema.Fields()))
 	offsetArray := genoffsetTakeIdx(d.consumedOffset, readSize, mem)

@@ -574,6 +574,15 @@ func TestLikeEdgeCases(t *testing.T) {
 // Distinct test cases
 
 func TestDistinctInit(t *testing.T) {
+	t.Run("distinct no expressions", func(t *testing.T) {
+
+		proj := distinctProject()
+		exprs := []Expr.Expression{}
+		_, err := NewDistinctExec(proj, exprs)
+		if err == nil {
+			t.Fatalf("expected error from passing in no expressions to distinct operator but got nil")
+		}
+	})
 	t.Run("distinct init and interface check", func(t *testing.T) {
 		proj := distinctProject()
 		exprs := []Expr.Expression{
@@ -613,7 +622,7 @@ func TestDistinctInit(t *testing.T) {
 		t.Logf("rc:\t%v\n", rc.PrettyPrint())
 
 	})
-	t.Run("Basic Next operator test | several distinct columns", func(t *testing.T) {
+	t.Run("BasicNextOperatorWithMultipleDistinctColumns", func(t *testing.T) {
 		proj := distinctProject()
 		exprs := []Expr.Expression{
 			Expr.NewColumnResolve("city"),
@@ -707,7 +716,7 @@ func TestDistinctNext(t *testing.T) {
 		// consume all
 		_, err = distinctExec.Next(10)
 		if err != nil && !errors.Is(err, io.EOF) {
-			print(1)
+			t.Fatalf("unexpected error while consuming distinct results: %v", err)
 			// it's ok if we got results; call Next again until EOF
 		}
 		// subsequent Next should return EOF
