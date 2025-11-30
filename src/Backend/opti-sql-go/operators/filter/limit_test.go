@@ -9,6 +9,7 @@ import (
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
+	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
 func generateTestColumns() ([]string, []any) {
@@ -45,8 +46,41 @@ func generateTestColumns() ([]string, []any) {
 
 	return names, columns
 }
+func generateTestColumnsDistinct() ([]string, []any) {
+	names := []string{
+		"city",
+		"state",
+		"product",
+	}
+	columns := []any{
+		// city - lots of repeated values
+		[]string{
+			"Boston", "Boston", "New York", "Boston", "Chicago",
+			"New York", "Boston", "Chicago", "New York", "Boston",
+			"Chicago", "Boston", "New York", "Chicago", "Boston",
+		},
+		// state - corresponds to cities
+		[]string{
+			"MA", "MA", "NY", "MA", "IL",
+			"NY", "MA", "IL", "NY", "MA",
+			"IL", "MA", "NY", "IL", "MA",
+		},
+		// product - repeated products
+		[]string{
+			"Laptop", "Phone", "Laptop", "Mouse", "Laptop",
+			"Phone", "Laptop", "Phone", "Tablet", "Mouse",
+			"Laptop", "Phone", "Laptop", "Tablet", "Mouse",
+		},
+	}
+	return names, columns
+}
 func basicProject() *project.InMemorySource {
 	names, col := generateTestColumns()
+	v, _ := project.NewInMemoryProjectExec(names, col)
+	return v
+}
+func distinctProject() *project.InMemorySource {
+	names, col := generateTestColumnsDistinct()
 	v, _ := project.NewInMemoryProjectExec(names, col)
 	return v
 }
@@ -534,5 +568,252 @@ func TestLikeEdgeCases(t *testing.T) {
 		)
 
 		maskAny(t, src, expr, expected)
+	})
+}
+
+// Distinct test cases
+
+func TestDistinctInit(t *testing.T) {
+	t.Run("distinct init and interface check", func(t *testing.T) {
+		proj := distinctProject()
+		exprs := []Expr.Expression{
+			Expr.NewColumnResolve("city"),
+		}
+		distinctExec, err := NewDistinctExec(proj, exprs)
+		if err != nil {
+			t.Fatalf("unexpected error creating new distinct operator")
+		}
+		s := distinctExec.Schema()
+		if !s.Equal(proj.Schema()) {
+			t.Fatalf("distinct schema should be the exact same as input but recieved %v instead of %v", s, proj.Schema())
+		}
+		t.Logf("distinct operator %v\n", distinctExec)
+		if err := distinctExec.Close(); err != nil {
+			t.Fatalf("unexpected error occured closing operator %v\n", err)
+		}
+		distinctExec.done = true
+		_, err = distinctExec.Next(3)
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("expected io.EOF but got %v\n", err)
+		}
+	})
+	t.Run("Basic Next operator test", func(t *testing.T) {
+		proj := distinctProject()
+		exprs := []Expr.Expression{
+			Expr.NewColumnResolve("city"),
+		}
+		distinctExec, err := NewDistinctExec(proj, exprs)
+		if err != nil {
+			t.Fatalf("unexpected error creating new distinct operator")
+		}
+		rc, err := distinctExec.Next(5)
+		if err != nil {
+			t.Fatalf("error occured grabbing next values from distinct operator %v", err)
+		}
+		t.Logf("rc:\t%v\n", rc.PrettyPrint())
+
+	})
+	t.Run("Basic Next operator test | several distinct columns", func(t *testing.T) {
+		proj := distinctProject()
+		exprs := []Expr.Expression{
+			Expr.NewColumnResolve("city"),
+			Expr.NewColumnResolve("state"),
+		}
+		distinctExec, err := NewDistinctExec(proj, exprs)
+		if err != nil {
+			t.Fatalf("unexpected error creating new distinct operator")
+		}
+		rc, err := distinctExec.Next(5)
+		if err != nil {
+			t.Fatalf("error occured grabbing next values from distinct operator %v", err)
+		}
+		t.Logf("rc:\t%v\n", rc.PrettyPrint())
+
+	})
+}
+func TestDistinctNext(t *testing.T) {
+	t.Run("return limited columns", func(t *testing.T) {
+		proj := distinctProject()
+		exprs := []Expr.Expression{
+			Expr.NewColumnResolve("city"),
+			Expr.NewColumnResolve("state"),
+		}
+		distinctExec, err := NewDistinctExec(proj, exprs)
+		if err != nil {
+			t.Fatalf("unexpected error creating new distinct operator")
+		}
+		batchsize := 1
+		count := 0
+		for {
+			rc, err := distinctExec.Next(uint16(batchsize))
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				t.Fatalf("error occured grabbing next values from distinct operator %v", err)
+			}
+			t.Logf("\t%v\n", rc.PrettyPrint())
+			if rc.RowCount != uint64(batchsize) {
+				t.Fatalf("expected record batch of size %d but got %d", batchsize, rc.RowCount)
+			}
+			count += int(rc.RowCount)
+		}
+		// distinctProject has 3 distinct (city,state) combinations
+		if count != 3 {
+			t.Fatalf("expected total distinct rows 3, got %d", count)
+		}
+	})
+
+	t.Run("single column distinct returns expected order", func(t *testing.T) {
+		proj := distinctProject()
+		exprs := []Expr.Expression{
+			Expr.NewColumnResolve("city"),
+		}
+		distinctExec, err := NewDistinctExec(proj, exprs)
+		if err != nil {
+			t.Fatalf("unexpected error creating new distinct operator")
+		}
+		// request all in one go
+		rc, err := distinctExec.Next(10)
+		if err != nil {
+			t.Fatalf("Next failed: %v", err)
+		}
+		if rc.RowCount != 3 {
+			t.Fatalf("expected 3 distinct cities, got %d", rc.RowCount)
+		}
+		// Expect first-seen order: Boston, New York, Chicago
+		cityArr := rc.Columns[0].(*array.String)
+		expect := []string{"Boston", "New York", "Chicago"}
+		for i := 0; i < int(rc.RowCount); i++ {
+			if cityArr.Value(i) != expect[i] {
+				t.Fatalf("expected city %s at idx %d, got %s", expect[i], i, cityArr.Value(i))
+			}
+		}
+		for _, c := range rc.Columns {
+			c.Release()
+		}
+	})
+
+	t.Run("Next returns EOF after consumption and Close works", func(t *testing.T) {
+		proj := distinctProject()
+		exprs := []Expr.Expression{
+			Expr.NewColumnResolve("city"),
+			Expr.NewColumnResolve("state"),
+		}
+		distinctExec, err := NewDistinctExec(proj, exprs)
+		if err != nil {
+			t.Fatalf("unexpected error creating new distinct operator")
+		}
+		// consume all
+		_, err = distinctExec.Next(10)
+		if err != nil && !errors.Is(err, io.EOF) {
+			print(1)
+			// it's ok if we got results; call Next again until EOF
+		}
+		// subsequent Next should return EOF
+		_, err = distinctExec.Next(1)
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("expected EOF after consuming distinct results, got %v", err)
+		}
+		if err := distinctExec.Close(); err != nil {
+			t.Fatalf("unexpected error on Close: %v", err)
+		}
+	})
+}
+
+func TestJoinArrays(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	t.Run("first array nil or empty - returns second", func(t *testing.T) {
+		builder := array.NewInt32Builder(mem)
+		defer builder.Release()
+		builder.AppendValues([]int32{1, 2, 3}, nil)
+		a2 := builder.NewArray()
+		defer a2.Release()
+
+		// Test with nil
+		result, err := joinArrays(nil, a2, mem)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Len() != 3 {
+			t.Fatalf("expected length 3, got %d", result.Len())
+		}
+
+		// Test with empty array
+		emptyBuilder := array.NewInt32Builder(mem)
+		defer emptyBuilder.Release()
+		a1Empty := emptyBuilder.NewArray()
+		defer a1Empty.Release()
+
+		result, err = joinArrays(a1Empty, a2, mem)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Len() != 3 {
+			t.Fatalf("expected length 3, got %d", result.Len())
+		}
+	})
+
+	t.Run("second array nil or empty - returns first", func(t *testing.T) {
+		builder := array.NewInt32Builder(mem)
+		defer builder.Release()
+		builder.AppendValues([]int32{4, 5, 6}, nil)
+		a1 := builder.NewArray()
+		defer a1.Release()
+
+		// Test with nil
+		result, err := joinArrays(a1, nil, mem)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Len() != 3 {
+			t.Fatalf("expected length 3, got %d", result.Len())
+		}
+
+		// Test with empty array
+		emptyBuilder := array.NewInt32Builder(mem)
+		defer emptyBuilder.Release()
+		a2Empty := emptyBuilder.NewArray()
+		defer a2Empty.Release()
+
+		result, err = joinArrays(a1, a2Empty, mem)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Len() != 3 {
+			t.Fatalf("expected length 3, got %d", result.Len())
+		}
+	})
+
+	t.Run("both arrays have data - concatenates", func(t *testing.T) {
+		builder1 := array.NewInt32Builder(mem)
+		defer builder1.Release()
+		builder1.AppendValues([]int32{1, 2, 3}, nil)
+		a1 := builder1.NewArray()
+		defer a1.Release()
+
+		builder2 := array.NewInt32Builder(mem)
+		defer builder2.Release()
+		builder2.AppendValues([]int32{4, 5, 6}, nil)
+		a2 := builder2.NewArray()
+		defer a2.Release()
+
+		result, err := joinArrays(a1, a2, mem)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Len() != 6 {
+			t.Fatalf("expected length 6, got %d", result.Len())
+		}
+
+		// Verify concatenated values
+		int32Result := result.(*array.Int32)
+		expectedValues := []int32{1, 2, 3, 4, 5, 6}
+		for i := 0; i < int32Result.Len(); i++ {
+			if int32Result.Value(i) != expectedValues[i] {
+				t.Fatalf("at index %d: expected %d, got %d", i, expectedValues[i], int32Result.Value(i))
+			}
+		}
 	})
 }
