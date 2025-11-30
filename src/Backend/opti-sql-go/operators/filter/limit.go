@@ -69,3 +69,13 @@ func (l *LimitExec) Schema() *arrow.Schema {
 func (l *LimitExec) Close() error {
 	return l.input.Close()
 }
+
+/*
+type Distinct struct {
+	child      operators.Operator
+	schema     *arrow.Schema
+	colExpr    Expr.Expression     // resolves to column that we want distinct values of
+	seenValues map[string]struct{} // arrow.Array.value(i) (stored and compared as string , structs occupie no space
+	done       bool
+}
+*/

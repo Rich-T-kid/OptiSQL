@@ -22,12 +22,10 @@ var (
 )
 
 type ParquetSource struct {
-	// existing fields
 	schema             *arrow.Schema
 	projectionPushDown []string // columns to project up
 	reader             pqarrow.RecordReader
-	// for internal reading
-	done bool // if set to true always return io.EOF
+	done               bool // if set to true always return io.EOF
 }
 
 func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
@@ -45,7 +43,7 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 
 	arrowReader, err := pqarrow.NewFileReader(
 		filerReader,
-		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: int64(Config.Batch.Size)}, // TODO: Read in from config for this stuff
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: int64(Config.Batch.Size)},
 		allocator,
 	)
 	if err != nil {
@@ -84,7 +82,7 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*Parq
 
 	arrowReader, err := pqarrow.NewFileReader(
 		filerReader,
-		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: int64(Config.Batch.Size)}, // TODO: Read in from config for this stuff
+		pqarrow.ArrowReadProperties{Parallel: true, BatchSize: int64(Config.Batch.Size)},
 		allocator,
 	)
 	if err != nil {

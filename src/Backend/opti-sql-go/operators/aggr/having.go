@@ -37,14 +37,14 @@ func (h *HavingExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if h.done {
 		return nil, io.EOF
 	}
-	batch, err := h.input.Next(n)
+	childBatch, err := h.input.Next(n)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			h.done = true
 		}
 		return nil, err
 	}
-	booleanMask, err := Expr.EvalExpression(h.havingExpr, batch)
+	booleanMask, err := Expr.EvalExpression(h.havingExpr, childBatch)
 	if err != nil {
 		return nil, err
 	}
@@ -52,19 +52,19 @@ func (h *HavingExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if !ok {
 		return nil, errors.New("having predicate did not evaluate to boolean array")
 	}
-	filteredCol := make([]arrow.Array, len(batch.Columns))
-	for i, col := range batch.Columns {
+	filteredCol := make([]arrow.Array, len(childBatch.Columns))
+	for i, col := range childBatch.Columns {
 		filteredCol[i], err = filter.ApplyBooleanMask(col, boolArr)
 		if err != nil {
 			return nil, err
 		}
 	}
 	// release old columns
-	operators.ReleaseArrays(batch.Columns)
+	operators.ReleaseArrays(childBatch.Columns)
 	size := uint64(filteredCol[0].Len())
 
 	return &operators.RecordBatch{
-		Schema:   batch.Schema,
+		Schema:   childBatch.Schema,
 		Columns:  filteredCol,
 		RowCount: size,
 	}, nil
