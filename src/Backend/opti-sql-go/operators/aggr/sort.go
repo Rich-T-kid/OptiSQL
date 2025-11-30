@@ -64,7 +64,6 @@ type SortExec struct {
 }
 
 func NewSortExec(child operators.Operator, sortKeys []SortKey) (*SortExec, error) {
-	fmt.Printf("sorts Keys %v\n", sortKeys)
 	return &SortExec{
 		child:    child,
 		schema:   child.Schema(),
@@ -178,18 +177,28 @@ only sort and keep the top k elements in memory
 type TopKSortExec struct {
 	child    operators.Operator
 	schema   *arrow.Schema
-	done     bool
 	sortKeys []SortKey // resolves to columns
 	k        uint16    // top k
+	// internal book keeping
+	sortedColumns  []arrow.Array
+	heap           []heapRow // at any one point this will only hold k elements
+	totalRows      uint64
+	consumedOffset uint64
+	consumed       bool // did we finish reading all of the child record batches?
+	done           bool
 }
 
 func NewTopKSortExec(child operators.Operator, sortKeys []SortKey, k uint16) (*TopKSortExec, error) {
-	fmt.Printf("sort keys %v\n", sortKeys)
+	fmt.Printf("k:%v\n", k)
+	size := len(child.Schema().Fields())
 	return &TopKSortExec{
 		child:    child,
 		schema:   child.Schema(),
 		sortKeys: sortKeys,
 		k:        k,
+		///
+		sortedColumns: make([]arrow.Array, size),
+		heap:          make([]heapRow, 0, k),
 	}, nil
 }
 
@@ -198,13 +207,155 @@ func (t *TopKSortExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if t.done {
 		return nil, io.EOF
 	}
-	return nil, nil
+	mem := memory.NewGoAllocator()
+	if !t.consumed {
+		for {
+			childBatch, err := t.child.Next(math.MaxUint16)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					t.consumed = true
+					if len(t.sortedColumns) != 0 {
+						t.totalRows = uint64(t.sortedColumns[0].Len())
+					}
+					break
+				}
+				return nil, err
+			}
+			// after the update, run take, and then update the sorted columns we store internally
+			// handle input validation here
+			err = t.UpdateTopKSorted(childBatch, t.sortKeys, mem)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var readSize uint64
+	remaining := t.totalRows - t.consumedOffset
+	if remaining < uint64(n) {
+		// if n is more than we have left just read up to remaining
+		readSize = uint64(remaining)
+		t.done = true
+	} else {
+		// remaining > n or remaining = n then just read n and return
+		readSize = uint64(n)
+	}
+	sortedArr, err := t.consumeSortedBatch(readSize, memory.NewGoAllocator())
+	if err != nil {
+		return nil, err
+	}
+	return &operators.RecordBatch{
+		Schema:   t.schema,
+		Columns:  sortedArr,
+		RowCount: readSize,
+	}, nil
+
 }
 func (t *TopKSortExec) Schema() *arrow.Schema {
 	return t.schema
 }
 func (t *TopKSortExec) Close() error {
 	return t.child.Close()
+}
+
+type heapRow struct {
+	rowIdx uint64
+	keys   []interface{} // colummns
+}
+
+/*
+evaluate key cols
+then iterate through all of the key columns and generate their key represenation
+*/
+func (t *TopKSortExec) UpdateTopKSorted(newBatch *operators.RecordBatch, sortKeys []SortKey, mem memory.Allocator) error {
+	// 1. Evaluate key columns
+	keyCols := make([]arrow.Array, len(sortKeys))
+	for i, sk := range sortKeys {
+		arr, err := Expr.EvalExpression(sk.Expr, newBatch)
+		if err != nil {
+			panic(err)
+		}
+		keyCols[i] = arr
+	}
+	allColumns, err := joinArrays(newBatch.Columns, t.sortedColumns, mem)
+	if err != nil {
+		return err
+	}
+
+	rowCount := int(allColumns[0].Len())
+	tmpBuff := make([]heapRow, 0, rowCount)
+	for i := 0; i < rowCount; i++ {
+		keys := make([]interface{}, len(sortKeys))
+		for k, col := range keyCols {
+			keys[k] = extractValue(col, i)
+		}
+		row := heapRow{
+			rowIdx: uint64(i),
+			keys:   keys,
+		}
+		tmpBuff = append(tmpBuff, row)
+
+	}
+	sortBySortKeys(tmpBuff, sortKeys)
+	fmt.Printf("buff: %v\nTopK:%v\n", tmpBuff, t.k)
+	tk := min(int(t.k), len(tmpBuff)) // in case k > len(tmpBuff)
+	topK := tmpBuff[:tk]
+	var idxArr []uint64
+	for i := range topK {
+		idxArr = append(idxArr, topK[i].rowIdx)
+	}
+	takeArray := idxToArrowArray(idxArr, mem)
+	count := newBatch.Schema.NumFields()
+	for i := range count {
+		sc, err := compute.TakeArray(context.Background(), allColumns[i], takeArray)
+		if err != nil {
+			return err
+		}
+		t.sortedColumns[i] = sc
+	}
+	return nil
+}
+
+func joinArrays(existing, newarrs []arrow.Array, mem memory.Allocator) ([]arrow.Array, error) {
+	if len(existing) == 0 {
+		return newarrs, nil
+	}
+	if len(newarrs) == 0 {
+		return existing, nil
+	}
+	result := make([]arrow.Array, len(existing))
+	for i := range existing {
+		v1, v2 := existing[i], newarrs[i]
+		if v1 == nil {
+			result[i] = v2
+			continue
+		} else if v2 == nil {
+			result[i] = v1
+			continue
+		}
+		combined, err := array.Concatenate([]arrow.Array{v1, v2}, mem)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = combined
+	}
+	return result, nil
+}
+
+func (t *TopKSortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]arrow.Array, error) {
+	ctx := context.TODO()
+	resultColumns := make([]arrow.Array, len(t.schema.Fields()))
+	offsetArray := genoffsetTakeIdx(t.consumedOffset, readsize, mem)
+	for i := range t.sortedColumns {
+		sortArr := t.sortedColumns[i]
+		arr, err := compute.TakeArray(ctx, sortArr, offsetArray)
+		if err != nil {
+			return nil, err
+		}
+		resultColumns[i] = arr
+
+	}
+	t.consumedOffset += readsize
+	return resultColumns, nil
 }
 
 /*
@@ -357,6 +508,227 @@ func compareFloat[T float32 | float64](a, b T) int {
 		return 0
 	}
 }
+func extractValue(col arrow.Array, idx int) interface{} {
+	switch arr := col.(type) {
+
+	case *array.String:
+		return arr.Value(idx)
+
+	case *array.Int8:
+		return int64(arr.Value(idx))
+	case *array.Int16:
+		return int64(arr.Value(idx))
+	case *array.Int32:
+		return int64(arr.Value(idx))
+	case *array.Int64:
+		return arr.Value(idx)
+
+	case *array.Uint8:
+		return uint64(arr.Value(idx))
+	case *array.Uint16:
+		return uint64(arr.Value(idx))
+	case *array.Uint32:
+		return uint64(arr.Value(idx))
+	case *array.Uint64:
+		return arr.Value(idx)
+
+	case *array.Float32:
+		return float64(arr.Value(idx))
+	case *array.Float64:
+		return arr.Value(idx)
+
+	case *array.Boolean:
+		return arr.Value(idx)
+
+	default:
+		panic("unsupported type")
+	}
+}
+
+func sortBySortKeys(rows []heapRow, sortKeys []SortKey) {
+	sort.Slice(rows, func(i, j int) bool {
+		ri := rows[i]
+		rj := rows[j]
+
+		for k, sk := range sortKeys {
+			cmp := comparePrimitive(ri.keys[k], rj.keys[k])
+
+			if cmp == 0 {
+				continue // move to next key
+			}
+
+			if sk.Ascending {
+				return cmp < 0
+			} else {
+				return cmp > 0
+			}
+		}
+
+		return false
+	})
+}
+
+func comparePrimitive(a, b any) int {
+	switch va := a.(type) {
+
+	case int:
+		vb := b.(int)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case int8:
+		vb := b.(int8)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case int16:
+		vb := b.(int16)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case int32:
+		vb := b.(int32)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case int64:
+		vb := b.(int64)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case uint:
+		vb := b.(uint)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case uint8:
+		vb := b.(uint8)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case uint16:
+		vb := b.(uint16)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case uint32:
+		vb := b.(uint32)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case uint64:
+		vb := b.(uint64)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case float32:
+		vb := b.(float32)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case float64:
+		vb := b.(float64)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case string:
+		vb := b.(string)
+		switch {
+		case va < vb:
+			return -1
+		case va > vb:
+			return 1
+		default:
+			return 0
+		}
+
+	case bool:
+		vb := b.(bool)
+		if va == vb {
+			return 0
+		}
+		if !va && vb {
+			return -1
+		}
+		return 1
+
+	default:
+		panic("unsupported primitive type")
+	}
+}
+
 func idxToArrowArray(v []uint64, mem memory.Allocator) arrow.Array {
 	// turn to array first
 	b := array.NewUint64Builder(mem)

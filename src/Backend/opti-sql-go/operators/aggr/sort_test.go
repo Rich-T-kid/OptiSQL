@@ -1,63 +1,18 @@
 package aggr
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"opti-sql-go/Expr"
-	"opti-sql-go/operators"
 	"opti-sql-go/operators/project"
 	"testing"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
-	"github.com/apache/arrow/go/v17/arrow/compute"
 	"github.com/apache/arrow/go/v17/arrow/memory"
 	"github.com/go-jose/go-jose/v4/testutils/require"
 )
-
-func buildAggTestRecordBatch(t *testing.T) *operators.RecordBatch {
-	names, cols := generateAggTestColumns()
-	mem := memory.NewGoAllocator()
-
-	arrowCols := make([]arrow.Array, len(cols))
-	fields := make([]arrow.Field, len(cols))
-
-	for i, col := range cols {
-		switch v := col.(type) {
-
-		case []int32:
-			b := array.NewInt32Builder(mem)
-			defer b.Release()
-			b.AppendValues(v, nil)
-			arrowCols[i] = b.NewArray()
-
-		case []string:
-			b := array.NewStringBuilder(mem)
-			defer b.Release()
-			b.AppendValues(v, nil)
-			arrowCols[i] = b.NewArray()
-
-		case []float64:
-			b := array.NewFloat64Builder(mem)
-			defer b.Release()
-			b.AppendValues(v, nil)
-			arrowCols[i] = b.NewArray()
-
-		default:
-			t.Fatalf("unsupported type in generateAggTestColumns")
-		}
-
-		fields[i] = arrow.Field{Name: names[i], Type: arrowCols[i].DataType()}
-	}
-
-	return &operators.RecordBatch{
-		Schema:   arrow.NewSchema(fields, nil),
-		Columns:  arrowCols,
-		RowCount: uint64(len(cols[0].([]int32))),
-	}
-}
 
 func TestSortInit(t *testing.T) {
 	// Simple passing test
@@ -461,6 +416,8 @@ func TestCompareArrowValues_AllTypes(t *testing.T) {
 	fsArr.Release()
 	fsb.Release()
 }
+
+// Top-K sort tests kept simple and grouped into two test functions
 func buildInt8(mem memory.Allocator, vals []int8) *array.Int8 {
 	b := array.NewInt8Builder(mem)
 	for _, v := range vals {
@@ -571,43 +528,93 @@ func buildBool(mem memory.Allocator, vals []bool) *array.Boolean {
 	return arr
 }
 
-func TestBasicTopKSortExpr(t *testing.T) {
-	t.Run("TopK Sort", func(t *testing.T) {
+// Consolidated TopK tests: two functions with multiple subtests, placed at file bottom.
+func TestTopKSort_BasicAndValues(t *testing.T) {
+	t.Run("AgeDesc_Top5", func(t *testing.T) {
+		proj := aggProject()
+		ageExpr := Expr.NewColumnResolve("age")
+		ageSK := NewSortKey(ageExpr, false)
+
+		sortExec, err := NewTopKSortExec(proj, CombineSortKeys(ageSK), 5)
+		if err != nil {
+			t.Fatalf("NewTopKSortExec error: %v", err)
+		}
+		rb, err := sortExec.Next(5)
+		if err != nil {
+			t.Fatalf("Next failed: %v", err)
+		}
+		if rb.RowCount != 5 {
+			t.Fatalf("expected 5 rows, got %d", rb.RowCount)
+		}
+		ages := rb.Columns[2].(*array.Int32)
+		expected := []int32{50, 48, 46, 45, 43}
+		for i := range expected {
+			if ages.Value(i) != expected[i] {
+				t.Fatalf("age mismatch at %d: expected %v got %v", i, expected[i], ages.Value(i))
+			}
+		}
+		for _, c := range rb.Columns {
+			c.Release()
+		}
+		if err := sortExec.Close(); err != nil {
+			t.Fatalf("close error: %v", err)
+		}
+	})
+
+	t.Run("KGreaterThanRows_ReturnsAll", func(t *testing.T) {
+		proj := aggProject()
+		ageExpr := Expr.NewColumnResolve("age")
+		ageSK := NewSortKey(ageExpr, false)
+		sortExec, err := NewTopKSortExec(proj, CombineSortKeys(ageSK), 100)
+		if err != nil {
+			t.Fatalf("NewTopKSortExec error: %v", err)
+		}
+		rb, err := sortExec.Next(1000)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatalf("Next error: %v", err)
+		}
+		if rb.RowCount == 0 {
+			t.Fatalf("expected rows when K > total rows")
+		}
+		for _, c := range rb.Columns {
+			c.Release()
+		}
+		if err := sortExec.Close(); err != nil {
+			t.Fatalf("close error: %v", err)
+		}
+	})
+}
+
+func TestTopKSort_CombinedAndPagination(t *testing.T) {
+	t.Run("CombinedKeys_Pagination_TotalMatchesK", func(t *testing.T) {
 		proj := aggProject()
 		nameExpr := Expr.NewColumnResolve("name")
 		nameSK := NewSortKey(nameExpr, true)
 		ageExpr := Expr.NewColumnResolve("age")
 		ageSK := NewSortKey(ageExpr, false)
-		sortExec, err := NewTopKSortExec(proj, CombineSortKeys(nameSK, ageSK), 5)
+		sortExec, err := NewTopKSortExec(proj, CombineSortKeys(ageSK, nameSK), 7)
 		if err != nil {
-			t.Fatalf("unexpected error from NewTopKSortExec : %v\n", err)
+			t.Fatalf("NewTopKSortExec error: %v", err)
 		}
-		t.Logf("%v\n", sortExec)
-
+		total := uint64(0)
+		for _, sz := range []uint16{3, 3, 3} {
+			rb, err := sortExec.Next(sz)
+			if err != nil && !errors.Is(err, io.EOF) {
+				t.Fatalf("Next error: %v", err)
+			}
+			total += rb.RowCount
+			for _, c := range rb.Columns {
+				c.Release()
+			}
+			if errors.Is(err, io.EOF) {
+				break
+			}
+		}
+		if total != 7 {
+			t.Fatalf("expected total 7 rows, got %d", total)
+		}
+		if err := sortExec.Close(); err != nil {
+			t.Fatalf("close error: %v", err)
+		}
 	})
-}
-
-func TestOne(t *testing.T) {
-	v := compute.GetExecCtx(context.Background())
-	names := v.Registry.GetFunctionNames()
-	for i, name := range names {
-		fmt.Printf("%d: %v\n", i, name)
-	}
-	/*
-		mem := memory.NewGoAllocator()
-		floatB := array.NewFloat64Builder(mem)
-		floatB.AppendValues([]float64{10.5, 20.3, 30.1, 40.7, 50.2}, []bool{true, true, true, true, true})
-		pos := array.NewInt32Builder(mem)
-		pos.AppendValues([]int32{1, 3, 4}, []bool{true, true, true})
-
-		dat, err := compute.Take(context.TODO(), *compute.DefaultTakeOptions(), compute.NewDatum(floatB.NewArray()), compute.NewDatum(pos.NewArray()))
-		if err != nil {
-			t.Fatalf("Take failed: %v", err)
-		}
-		array, ok := dat.(*compute.ArrayDatum)
-		if !ok {
-			t.Logf("expected an array to be returned but got something else %T\n", dat)
-		}
-		t.Logf("data: %v\n", array.MakeArray())
-	*/
 }
