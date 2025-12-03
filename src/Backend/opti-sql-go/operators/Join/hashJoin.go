@@ -9,7 +9,6 @@ import (
 	"math"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
-	"opti-sql-go/operators/aggr"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -18,6 +17,11 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
+// TODO: clean up PR and push again
+// TODO: write intergration test for operators to work together
+// TODO: see ticket #27
+// TODO: take small break from this project to work on inverted index search for a couple days
+
 var (
 	ErrInvalidJoinClauseCount = func(l, r int) error {
 		return fmt.Errorf("mismatched number of join expressions between left and right, left: %d vs right: %d", l, r)
@@ -25,7 +29,7 @@ var (
 )
 
 var (
-	_ = (operators.Operator)(&SortMergeJoinExec{})
+	_ = (operators.Operator)(&HashJoinExec{})
 )
 
 type JoinType int
@@ -84,86 +88,6 @@ func NewJoinClause(leftS, rightS []Expr.Expression) JoinClause {
 		leftS:  leftS,
 		rightS: rightS,
 	}
-}
-
-// use sort merge join when the output needs to be sorted on the join keys
-type SortMergeJoinExec struct {
-	leftSource  operators.Operator
-	rightSource operators.Operator
-	clause      JoinClause
-	joinType    JoinType
-	filters     []Expr.Expression //TODO: incorpoarte
-	schema      *arrow.Schema
-	done        bool
-	// internalState
-	outputBatch []arrow.Array // intermediate storage for output arrays
-
-}
-
-func NewSortMergeJoinExec(left operators.Operator, right operators.Operator, clause JoinClause, joinType JoinType, filters []Expr.Expression) (*SortMergeJoinExec, error) {
-	fmt.Printf("join clause: \t%v\njoin Type: \t%v\n", clause.String(), joinType)
-	schema, err := joinSchemas(left.Schema(), right.Schema())
-	if err != nil {
-		return nil, err
-	}
-	// handle sorting this here. so the .Next function has less logic
-	if len(clause.leftS) != len(clause.rightS) {
-		return nil, ErrInvalidJoinClauseCount(len(clause.leftS), len(clause.rightS))
-	}
-	var Lsk []aggr.SortKey
-	for i := 0; i < len(clause.leftS); i++ {
-		Lsk = append(Lsk, aggr.SortKey{
-			Expr:      clause.leftS[i],
-			Ascending: true,
-		})
-	}
-	var Rsk []aggr.SortKey
-	for i := 0; i < len(clause.rightS); i++ {
-		Rsk = append(Rsk, aggr.SortKey{
-			Expr:      clause.rightS[i],
-			Ascending: true,
-		})
-	}
-	ls, err := aggr.NewSortExec(left, Lsk)
-	if err != nil {
-		return nil, err
-	}
-	rs, err := aggr.NewSortExec(right, Rsk)
-	if err != nil {
-		return nil, err
-	}
-
-	return &SortMergeJoinExec{
-		leftSource:  rs,
-		rightSource: ls,
-		clause:      clause,
-		joinType:    joinType,
-		filters:     filters,
-		schema:      schema,
-		outputBatch: make([]arrow.Array, schema.NumFields()),
-	}, nil
-}
-
-// TODO:
-
-func (smj *SortMergeJoinExec) Next(n uint16) (*operators.RecordBatch, error) {
-	if smj.done {
-		return nil, io.EOF
-	}
-	return nil, nil
-}
-func (smj *SortMergeJoinExec) Schema() *arrow.Schema { return smj.schema }
-func (smj *SortMergeJoinExec) Close() error {
-	// do other clean up but for now just pass down to child
-	err1 := smj.leftSource.Close()
-	err2 := smj.rightSource.Close()
-	if err1 != nil {
-		return err1
-	}
-	if err2 != nil {
-		return err2
-	}
-	return nil
 }
 
 // left schema + right schema, if left and right have same column name, prefix with left_ and right_
@@ -238,7 +162,6 @@ type joinPair struct {
 }
 
 func NewHashJoinExec(left operators.Operator, right operators.Operator, clause JoinClause, joinType JoinType, filters []Expr.Expression) (*HashJoinExec, error) {
-	fmt.Printf("join clause: \t%v\njoin Type: \t%v\n", clause.String(), joinType)
 	schema, err := joinSchemas(left.Schema(), right.Schema())
 	if err != nil {
 		return nil, err
@@ -270,16 +193,17 @@ func (hj *HashJoinExec) Next(_ uint16) (*operators.RecordBatch, error) {
 	if err != nil {
 		return nil, err
 	}
+	emptyCols := make([]arrow.Array, hj.schema.NumFields())
 	if len(leftArr) == 0 || len(rightArr) == 0 {
 		hj.done = true
 		return &operators.RecordBatch{
 			Schema:   hj.Schema(),
+			Columns:  emptyCols,
 			RowCount: uint64(0),
 		}, nil
 	}
 	leftRowCount := leftArr[0].Len()
 	rightRowCount := rightArr[0].Len()
-	//fmt.Printf("left:\t%v\nright:\t%v\n", leftArr, rightArr)
 	leftComp, err := buildComptables(hj.clause.leftS, leftArr, hj.leftSource.Schema())
 	if err != nil {
 		return nil, err
@@ -289,25 +213,22 @@ func (hj *HashJoinExec) Next(_ uint16) (*operators.RecordBatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("left Comparission arrays:\t%v\nright Comparrission arrays:\t%v\n", leftComp, rightComp)
 	ht := buildRightHashTable(rightComp, rightRowCount)
 	pairs := probeJoin(leftComp, ht, leftRowCount)
 	if len(pairs) == 0 {
 		hj.done = true
 		return &operators.RecordBatch{
 			Schema:   hj.Schema(),
-			Columns:  []arrow.Array{},
+			Columns:  emptyCols,
 			RowCount: 0,
 		}, nil
 	}
-	fmt.Printf("ht:\t%v\npairs:\t%v\n", ht, pairs)
 	leftIdxArr, rightIdxArr, err := buildIndexArrays(mem, pairs)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Printf("leftIDX:\t%v\nrightIDX:\t%v\n", leftIdxArr, rightIdxArr)
-	outArr, err := hj.buildOutputArrays(mem, leftArr, rightArr, leftIdxArr, rightIdxArr)
+	outArr, err := hj.buildOutputArrays(leftArr, rightArr, leftIdxArr, rightIdxArr)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +390,6 @@ func buildIndexArrays(
 }
 
 func (hj *HashJoinExec) buildOutputArrays(
-	mem memory.Allocator,
 	leftCols []arrow.Array,
 	rightCols []arrow.Array,
 	leftIdxArr arrow.Array,
