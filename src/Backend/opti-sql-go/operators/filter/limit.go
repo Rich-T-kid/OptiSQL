@@ -94,7 +94,7 @@ type DistinctExec struct {
 
 func NewDistinctExec(input operators.Operator, colExpr []Expr.Expression) (*DistinctExec, error) {
 	if len(colExpr) == 0 {
-		return nil, errors.New("Distinct operator requires at least one column expression")
+		return nil, errors.New("distinct operator requires at least one column expression")
 	}
 	return &DistinctExec{
 		input:               input,
