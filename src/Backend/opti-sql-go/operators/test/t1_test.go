@@ -2,9 +2,13 @@ package test
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
+	join "opti-sql-go/operators/Join"
+	"opti-sql-go/operators/aggr"
 	"opti-sql-go/operators/filter"
 	"opti-sql-go/operators/project"
 	"strings"
@@ -202,25 +206,13 @@ func NewIntegrationSource2(mem memory.Allocator) (*project.InMemorySource, error
 	names, cols := generateIntegrationDataset2(mem)
 	return project.NewInMemoryProjectExecFromArrays(names, cols)
 }
-func runAll(t *testing.T, op operators.Operator) *operators.RecordBatch {
-	t.Helper()
-
-	b, err := op.Next(1000)
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err != nil {
-		t.Fatalf("unexpected err from Next: %v", err)
-	}
-	return b
-}
 
 /*
 ============================================================================
 Project tests
 ============================================================================
 */
-func TestIntegrationProjectExec(t *testing.T) {
+func TestProjectExec(t *testing.T) {
 	t.Run("integration_project_exec", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
 
@@ -368,16 +360,14 @@ func TestIntegrationProjectExec(t *testing.T) {
 	})
 
 }
-func TestIntegrationFilterExec(t *testing.T) {
+
+/*
+============================================================================
+Filter tests
+============================================================================
+*/
+func TestFilterExec(t *testing.T) {
 	mem := memory.NewGoAllocator()
-
-	// ----- load dataset -----
-
-	// convenience handles to original cols for expected-value validation
-	//ageArr := cols[3].(*array.Int32)
-	//salaryArr := cols[4].(*array.Float64)
-	//deptArr := cols[5].(*array.String)
-	//regionArr := cols[6].(*array.String)
 
 	// ----------------------------------------------------------------------
 	t.Run("filter_age_gt_30", func(t *testing.T) {
@@ -501,4 +491,1065 @@ func TestIntegrationFilterExec(t *testing.T) {
 		}
 	})
 
+}
+
+/*
+============================================================================
+Sort tests
+============================================================================
+*/
+func TestSortTest(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	t.Run("sort_salary_ascending", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+
+		sortKeys := []aggr.SortKey{
+			{Expr: Expr.NewColumnResolve("salary"), Ascending: true},
+		}
+
+		sortExec, err := aggr.NewSortExec(src, sortKeys)
+		if err != nil {
+			t.Fatalf("failed to create sort exec: %v", err)
+		}
+
+		batch, err := sortExec.Next(1000)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		salaryArr := batch.Columns[4].(*array.Float64)
+
+		for i := 1; i < salaryArr.Len(); i++ {
+			if salaryArr.IsNull(i-1) || salaryArr.IsNull(i) {
+				continue
+			}
+			if salaryArr.Value(i) < salaryArr.Value(i-1) {
+				t.Fatalf("salary not sorted ASC at row %d: %f < %f",
+					i, salaryArr.Value(i), salaryArr.Value(i-1))
+			}
+		}
+
+	})
+
+	// ─────────────────────────────────────────────────────────────
+
+	t.Run("sort_lastname_descending", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+
+		sortKeys := []aggr.SortKey{
+			{Expr: Expr.NewColumnResolve("last_name"), Ascending: false},
+		}
+
+		sortExec, err := aggr.NewSortExec(src, sortKeys)
+		if err != nil {
+			t.Fatalf("failed to create sort exec: %v", err)
+		}
+
+		batch, err := sortExec.Next(1000)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		lastArr := batch.Columns[2].(*array.String)
+
+		for i := 1; i < lastArr.Len(); i++ {
+			if lastArr.IsNull(i-1) || lastArr.IsNull(i) {
+				continue
+			}
+
+			// descending → current <= previous
+			if lastArr.Value(i) > lastArr.Value(i-1) {
+				t.Fatalf("last_name not sorted DESC at %d: %s > %s",
+					i, lastArr.Value(i), lastArr.Value(i-1))
+			}
+		}
+	})
+
+	// ─────────────────────────────────────────────────────────────
+
+	t.Run("sort_department_then_salary_desc", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+
+		sortKeys := []aggr.SortKey{
+			{Expr: Expr.NewColumnResolve("department"), Ascending: true}, // asc
+			{Expr: Expr.NewColumnResolve("salary"), Ascending: false},    // desc
+		}
+
+		sortExec, err := aggr.NewSortExec(src, sortKeys)
+		if err != nil {
+			t.Fatalf("failed to create sort exec: %v", err)
+		}
+
+		batch, err := sortExec.Next(1000)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		deptArr := batch.Columns[5].(*array.String)
+		salaryArr := batch.Columns[4].(*array.Float64)
+
+		for i := 1; i < deptArr.Len(); i++ {
+			if deptArr.IsNull(i) || deptArr.IsNull(i-1) {
+				continue
+			}
+
+			prevDept := deptArr.Value(i - 1)
+			currDept := deptArr.Value(i)
+
+			// department ascending grouping
+			if currDept < prevDept {
+				t.Fatalf("department not sorted ASC at %d: %s < %s",
+					i, currDept, prevDept)
+			}
+
+			// if same department → salary must be descending
+			if currDept == prevDept {
+				if !salaryArr.IsNull(i) && !salaryArr.IsNull(i-1) {
+					if salaryArr.Value(i) > salaryArr.Value(i-1) {
+						t.Fatalf("salary not DESC within department '%s' at row %d",
+							currDept, i)
+					}
+				}
+			}
+		}
+	})
+}
+
+/*
+============================================================================
+Aggregations tests
+============================================================================
+*/
+func TestIntegrationAggregations(t *testing.T) {
+	t.Run("sum_avg_min_max_salary", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+
+		// Load integration dataset
+		_, cols := generateIntegrationDataset1(mem)
+		salaryArr := cols[4].(*array.Float64)
+
+		// Expected values
+		var sum float64
+		min := math.MaxFloat64
+		max := -math.MaxFloat64
+		count := 0
+
+		for i := 0; i < salaryArr.Len(); i++ {
+			if salaryArr.IsNull(i) {
+				continue
+			}
+			v := salaryArr.Value(i)
+			sum += v
+			count++
+			if v < min {
+				min = v
+			}
+			if v > max {
+				max = v
+			}
+		}
+		avg := sum / float64(count)
+
+		// Build aggregation operator
+		src, _ := NewIntegrationSource1(mem)
+
+		salCol := Expr.NewColumnResolve("salary")
+
+		agg, err := aggr.NewGlobalAggrExec(src,
+			[]aggr.AggregateFunctions{aggr.NewAggregateFunctions(aggr.Sum, salCol),
+				aggr.NewAggregateFunctions(aggr.Avg, salCol),
+				aggr.NewAggregateFunctions(aggr.Min, salCol),
+				aggr.NewAggregateFunctions(aggr.Max, salCol)})
+		if err != nil {
+			t.Fatalf("aggregation init failed: %v", err)
+		}
+
+		batch, err := agg.Next(100)
+		if err != nil {
+			t.Fatalf("aggregation next failed: %v", err)
+		}
+
+		// Extract columns from result
+		sumArr := batch.Columns[0].(*array.Float64)
+		avgArr := batch.Columns[1].(*array.Float64)
+		minArr := batch.Columns[2].(*array.Float64)
+		maxArr := batch.Columns[3].(*array.Float64)
+
+		if sumArr.Value(0) != sum {
+			t.Fatalf("SUM mismatch: expected %f, got %f", sum, sumArr.Value(0))
+		}
+		if avgArr.Value(0) != avg {
+			t.Fatalf("AVG mismatch: expected %f, got %f", avg, avgArr.Value(0))
+		}
+		if minArr.Value(0) != min {
+			t.Fatalf("MIN mismatch: expected %f, got %f", min, minArr.Value(0))
+		}
+		if maxArr.Value(0) != max {
+			t.Fatalf("MAX mismatch: expected %f, got %f", max, maxArr.Value(0))
+		}
+	})
+
+	// ─────────────────────────────────────────────────────────────
+
+	t.Run("sum_age", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		_, cols := generateIntegrationDataset1(mem)
+		ageArr := cols[3].(*array.Int32)
+
+		// Expected SUM(age)
+		var sum int32
+		for i := 0; i < ageArr.Len(); i++ {
+			if !ageArr.IsNull(i) {
+				sum += ageArr.Value(i)
+			}
+		}
+
+		src, _ := NewIntegrationSource1(mem)
+
+		agg, err := aggr.NewGlobalAggrExec(
+			src,
+			[]aggr.AggregateFunctions{
+				aggr.NewAggregateFunctions(
+					aggr.Sum, Expr.NewColumnResolve("age")),
+			},
+		)
+		if err != nil {
+			t.Fatalf("agg init failed: %v", err)
+		}
+
+		batch, _ := agg.Next(100)
+		sumArr := batch.Columns[0].(*array.Float64) // SUM(int32) -> int64
+
+		if sumArr.Value(0) != float64(sum) {
+			t.Fatalf("SUM(age) mismatch: expected %v, got %v", sum, sumArr.Value(0))
+		}
+	})
+
+	// ─────────────────────────────────────────────────────────────
+
+	t.Run("min_max_age", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		_, cols := generateIntegrationDataset1(mem)
+		ageArr := cols[3].(*array.Int32)
+
+		min := int32(math.MaxInt32)
+		max := int32(math.MinInt32)
+
+		for i := 0; i < ageArr.Len(); i++ {
+			if ageArr.IsNull(i) {
+				continue
+			}
+			v := ageArr.Value(i)
+			if v < min {
+				min = v
+			}
+			if v > max {
+				max = v
+			}
+		}
+
+		src, _ := NewIntegrationSource1(mem)
+
+		agg, err := aggr.NewGlobalAggrExec(src,
+			[]aggr.AggregateFunctions{
+				aggr.NewAggregateFunctions(aggr.Min, Expr.NewColumnResolve("age")),
+				aggr.NewAggregateFunctions(aggr.Max, Expr.NewColumnResolve("age")),
+			})
+		if err != nil {
+			t.Fatalf("agg init failed: %v", err)
+		}
+
+		batch, _ := agg.Next(100)
+
+		minArr := batch.Columns[0].(*array.Float64)
+		maxArr := batch.Columns[1].(*array.Float64)
+
+		if minArr.Value(0) != float64(min) {
+			t.Fatalf("MIN(age) mismatch: expected %v, got %v", min, minArr.Value(0))
+		}
+		if maxArr.Value(0) != float64(max) {
+			t.Fatalf("MAX(age) mismatch: expected %v, got %v", max, maxArr.Value(0))
+		}
+	})
+}
+
+/*
+============================================================================
+Group-by tests
+============================================================================
+*/
+
+func TestGroupByExec(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	// Utility helper to get origin dataset quickly
+	_, originCols := generateIntegrationDataset1(mem)
+
+	// ------------------------------------------------------------
+	t.Run("group_by_department_count", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+
+		dept := Expr.NewColumnResolve("department")
+
+		groupByExpr := []Expr.Expression{dept}
+		aggs := []aggr.AggregateFunctions{
+			{AggrFunc: aggr.Count, Child: Expr.NewColumnResolve("id")},
+		}
+
+		gb, err := aggr.NewGroupByExec(src, aggs, groupByExpr)
+		if err != nil {
+			t.Fatalf("gb init failed: %v", err)
+		}
+
+		batch, err := gb.Next(1024)
+		if err != nil {
+			t.Fatalf("group by Next failed: %v", err)
+		}
+
+		deptCol := batch.Columns[0].(*array.String)
+		countCol := batch.Columns[1].(*array.Float64) // count returns float64 in your impl
+
+		// Validate counts by manually counting departments
+		origDept := originCols[5].(*array.String)
+		expected := make(map[string]int)
+
+		for i := 0; i < origDept.Len(); i++ {
+			if origDept.IsNull(i) {
+				expected["NULL"]++
+			} else {
+				expected[origDept.Value(i)]++
+			}
+		}
+
+		for i := 0; i < int(batch.RowCount); i++ {
+			key := "NULL"
+			if !deptCol.IsNull(i) {
+				key = deptCol.Value(i)
+			}
+			got := int(countCol.Value(i))
+			want := expected[key]
+
+			if got != want {
+				t.Fatalf("group %s: expected %d, got %d", key, want, got)
+			}
+		}
+	})
+
+	// ------------------------------------------------------------
+	t.Run("group_by_department_region_sum_salary", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+
+		dept := Expr.NewColumnResolve("department")
+		region := Expr.NewColumnResolve("region")
+
+		groupByExpr := []Expr.Expression{dept, region}
+		aggs := []aggr.AggregateFunctions{
+			{AggrFunc: aggr.Sum, Child: Expr.NewColumnResolve("salary")},
+		}
+
+		gb, err := aggr.NewGroupByExec(src, aggs, groupByExpr)
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		batch, err := gb.Next(1024)
+		if err != nil {
+			t.Fatalf("Next failed: %v", err)
+		}
+
+		deptCol := batch.Columns[0].(*array.String)
+		regionCol := batch.Columns[1].(*array.String)
+		sumCol := batch.Columns[2].(*array.Float64)
+
+		origDept := originCols[5].(*array.String)
+		origRegion := originCols[6].(*array.String)
+		origSalary := originCols[4].(*array.Float64)
+
+		expected := make(map[string]float64)
+
+		for i := 0; i < origSalary.Len(); i++ {
+			d := "NULL"
+			if !origDept.IsNull(i) {
+				d = origDept.Value(i)
+			}
+
+			r := "NULL"
+			if !origRegion.IsNull(i) {
+				r = origRegion.Value(i)
+			}
+
+			key := d + "|" + r
+			expected[key] += origSalary.Value(i)
+		}
+
+		for i := 0; i < int(batch.RowCount); i++ {
+			d := "NULL"
+			if !deptCol.IsNull(i) {
+				d = deptCol.Value(i)
+			}
+
+			r := "NULL"
+			if !regionCol.IsNull(i) {
+				r = regionCol.Value(i)
+			}
+
+			key := d + "|" + r
+			got := sumCol.Value(i)
+			want := expected[key]
+
+			if got != want {
+				t.Fatalf("(%s,%s): expected sum=%f, got %f", d, r, want, got)
+			}
+		}
+	})
+
+	// ------------------------------------------------------------
+	t.Run("group_by_with_null_keys", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		src, _ := NewIntegrationSource1(mem)
+
+		region := Expr.NewColumnResolve("region")
+
+		groupByExpr := []Expr.Expression{region}
+		aggs := []aggr.AggregateFunctions{
+			{AggrFunc: aggr.Count, Child: Expr.NewColumnResolve("id")},
+		}
+
+		gb, _ := aggr.NewGroupByExec(src, aggs, groupByExpr)
+
+		batch, err := gb.Next(1024)
+		if err != nil {
+			t.Fatalf("Next failed: %v", err)
+		}
+
+		regionCol := batch.Columns[0].(*array.String)
+		countCol := batch.Columns[1].(*array.Float64)
+
+		origRegion := originCols[6].(*array.String)
+		expected := make(map[string]int)
+
+		for i := 0; i < origRegion.Len(); i++ {
+			key := "NULL"
+			if !origRegion.IsNull(i) {
+				key = origRegion.Value(i)
+			}
+			expected[key]++
+		}
+
+		for i := 0; i < int(batch.RowCount); i++ {
+			k := "NULL"
+			if !regionCol.IsNull(i) {
+				k = regionCol.Value(i)
+			}
+
+			got := int(countCol.Value(i))
+			want := expected[k]
+
+			if got != want {
+				t.Fatalf("region=%s expected %d got %d", k, want, got)
+			}
+		}
+	})
+}
+
+/*
+============================================================================
+Having tests
+============================================================================
+*/
+func TestHavingExec(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	// helper — build group by department avg salary
+	buildDeptAvg := func() operators.Operator {
+		src, _ := NewIntegrationSource1(mem)
+
+		aggs := []aggr.AggregateFunctions{
+			{AggrFunc: aggr.Avg, Child: Expr.NewColumnResolve("salary")},
+		}
+
+		gb, _ := aggr.NewGroupByExec(src, aggs,
+			[]Expr.Expression{Expr.NewColumnResolve("department")},
+		)
+		return gb
+	}
+
+	// ------------------------------------------------------------
+	t.Run("having_avg_salary_gt_75000", func(t *testing.T) {
+		gb := buildDeptAvg()
+
+		having := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("avg_Column(salary)"),
+			Expr.GreaterThan,
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(75000)),
+		)
+
+		hv, _ := aggr.NewHavingExec(gb, having)
+		fmt.Printf("\t%v\n", hv.Schema())
+		batch, err := hv.Next(500)
+		if err != nil {
+			t.Fatalf("having next failed: %v", err)
+		}
+		t.Logf("batch:\t%v\n", batch.PrettyPrint())
+
+		deptCol := batch.Columns[0].(*array.String)
+		avgCol := batch.Columns[1].(*array.Float64)
+
+		for i := 0; i < int(batch.RowCount); i++ {
+			if avgCol.Value(i) <= 75000 {
+				t.Fatalf("expected avg > 75k, got %f for dept %s",
+					avgCol.Value(i), deptCol.Value(i))
+			}
+		}
+	})
+
+	// ------------------------------------------------------------
+	t.Run("having_no_group_passes", func(t *testing.T) {
+		gb := buildDeptAvg()
+
+		having := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("avg_Column(salary)"),
+			Expr.GreaterThan,
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(999999)),
+		)
+
+		hv, _ := aggr.NewHavingExec(gb, having)
+		batch, _ := hv.Next(100)
+
+		if batch.RowCount != 0 {
+			t.Fatalf("expected empty result")
+		}
+	})
+
+	// ------------------------------------------------------------
+	t.Run("having_everything_passes", func(t *testing.T) {
+		gb := buildDeptAvg()
+
+		having := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("avg_Column(salary)"),
+			Expr.GreaterThan,
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(0)),
+		)
+
+		hv, _ := aggr.NewHavingExec(gb, having)
+		batch, _ := hv.Next(1000)
+
+		if batch.RowCount == 0 {
+			t.Fatalf("expected some rows")
+		}
+	})
+}
+
+/*
+============================================================================
+Distinct tests
+============================================================================
+*/
+func TestDistinctExec(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	// Utility: load dataset
+	names, cols := generateIntegrationDataset1(mem)
+	src, err := project.NewInMemoryProjectExecFromArrays(names, cols)
+	if err != nil {
+		t.Fatalf("failed to create source: %v", err)
+	}
+
+	// -------------------------------
+	// 1) DISTINCT on department
+	// -------------------------------
+	t.Run("distinct_department", func(t *testing.T) {
+		expr := Expr.NewExpressions(
+			Expr.NewColumnResolve("department"),
+		)
+
+		de, err := filter.NewDistinctExec(src, expr)
+		if err != nil {
+			t.Fatalf("distinct init failed: %v", err)
+		}
+
+		batch, err := de.Next(100)
+		if err != nil {
+			t.Fatalf("distinct next failed: %v", err)
+		}
+
+		//deptArr := batch.Columns[5].(*array.String)
+
+		// get expected unique departments from original dataset
+		origDept := cols[5].(*array.String)
+		expected := make(map[string]struct{})
+		for i := 0; i < origDept.Len(); i++ {
+			if origDept.IsNull(i) {
+				expected["NULL"] = struct{}{}
+			} else {
+				expected[origDept.Value(i)] = struct{}{}
+			}
+		}
+
+		if int(batch.RowCount) != len(expected) {
+			t.Fatalf("expected %d distinct departments, got %d",
+				len(expected), batch.RowCount)
+		}
+	})
+
+	// -------------------------------
+	// 2) DISTINCT on region
+	// -------------------------------
+	t.Run("distinct_region", func(t *testing.T) {
+		// reload source (distinct consumes input)
+		src2, _ := project.NewInMemoryProjectExecFromArrays(names, cols)
+
+		expr := Expr.NewExpressions(
+			Expr.NewColumnResolve("region"),
+		)
+
+		de, err := filter.NewDistinctExec(src2, expr)
+		if err != nil {
+			t.Fatalf("distinct init failed: %v", err)
+		}
+
+		batch, err := de.Next(100)
+		if err != nil {
+			t.Fatalf("distinct next failed: %v", err)
+		}
+
+		regionArr := batch.Columns[6].(*array.String)
+
+		orig := cols[6].(*array.String)
+		expected := make(map[string]struct{})
+		for i := 0; i < orig.Len(); i++ {
+			if orig.IsNull(i) {
+				expected["NULL"] = struct{}{}
+			} else {
+				expected[orig.Value(i)] = struct{}{}
+			}
+		}
+
+		if int(regionArr.Len()) != len(expected) {
+			t.Fatalf("expected %d distinct regions, got %d",
+				len(expected), regionArr.Len())
+		}
+	})
+
+	// -------------------------------
+	// 3) DISTINCT(id) → should return all 20 rows
+	// -------------------------------
+	t.Run("distinct_id_all_unique", func(t *testing.T) {
+		src3, _ := project.NewInMemoryProjectExecFromArrays(names, cols)
+
+		expr := Expr.NewExpressions(
+			Expr.NewColumnResolve("id"),
+		)
+
+		de, err := filter.NewDistinctExec(src3, expr)
+		if err != nil {
+			t.Fatalf("distinct init failed: %v", err)
+		}
+
+		batch, err := de.Next(100)
+		if err != nil {
+			t.Fatalf("distinct next failed: %v", err)
+		}
+
+		if batch.RowCount != 20 {
+			t.Fatalf("expected 20 distinct id rows, got %d", batch.RowCount)
+		}
+	})
+}
+
+/*
+============================================================================
+Limit tests
+============================================================================
+*/
+func TestLimitExec(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	names, cols := generateIntegrationDataset1(mem)
+
+	// ----------------------------------
+	// 1) LIMIT 5
+	// ----------------------------------
+	t.Run("limit_5", func(t *testing.T) {
+		src, _ := project.NewInMemoryProjectExecFromArrays(names, cols)
+
+		lim, err := filter.NewLimitExec(src, 5)
+		if err != nil {
+			t.Fatalf("limit init failed: %v", err)
+		}
+
+		batch, err := lim.Next(100)
+		if err != nil {
+			t.Fatalf("limit next error: %v", err)
+		}
+
+		if batch.RowCount != 5 {
+			t.Fatalf("expected 5 rows, got %d", batch.RowCount)
+		}
+
+		// verify first 5 IDs match original dataset
+		idArr := batch.Columns[0].(*array.Int32)
+		origID := cols[0].(*array.Int32)
+
+		for i := 0; i < 5; i++ {
+			if idArr.Value(i) != origID.Value(i) {
+				t.Fatalf("row %d: expected id=%d, got id=%d",
+					i, origID.Value(i), idArr.Value(i))
+			}
+		}
+	})
+
+	// ----------------------------------
+	// 2) LIMIT EXACT = 20
+	// ----------------------------------
+	t.Run("limit_exact", func(t *testing.T) {
+		src, _ := project.NewInMemoryProjectExecFromArrays(names, cols)
+
+		lim, err := filter.NewLimitExec(src, 20)
+		if err != nil {
+			t.Fatalf("limit init failed: %v", err)
+		}
+
+		batch, err := lim.Next(100)
+		if err != nil {
+			t.Fatalf("limit error: %v", err)
+		}
+
+		if batch.RowCount != 20 {
+			t.Fatalf("expected 20 rows, got %d", batch.RowCount)
+		}
+	})
+
+	// ----------------------------------
+	// 3) LIMIT larger than dataset
+	// ----------------------------------
+	t.Run("limit_too_large", func(t *testing.T) {
+		src, _ := project.NewInMemoryProjectExecFromArrays(names, cols)
+
+		lim, err := filter.NewLimitExec(src, 50)
+		if err != nil {
+			t.Fatalf("limit init failed: %v", err)
+		}
+
+		batch, err := lim.Next(100)
+		if err != nil {
+			t.Fatalf("limit next failed: %v", err)
+		}
+
+		if batch.RowCount != 20 {
+			t.Fatalf("expected 20 rows when limit > dataset size, got %d", batch.RowCount)
+		}
+	})
+}
+
+/*
+============================================================================
+Scalar function tests
+============================================================================
+*/
+func TestScalarStringFunctions(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	// We will run: SELECT department, UPPER(department), LOWER(department)
+	// Using ScalarFunction(Upper, col("department"))
+	// And ScalarFunction(Lower, col("department"))
+
+	t.Run("UpperFunction", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+		colDept := Expr.NewColumnResolve("department")
+
+		upperExpr := Expr.NewScalarFunction(Expr.Upper, colDept)
+
+		// Evaluate: UPPER(department)
+		batch, err := src.Next(100)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		arr, err := Expr.EvalScalarFunction(upperExpr, batch)
+		if err != nil {
+			t.Fatalf("upper eval failed: %v", err)
+		}
+
+		out := arr.(*array.String)
+
+		// Compare with strings.ToUpper
+		deptCol, _ := Expr.EvalExpression(colDept, batch)
+		deptArr := deptCol.(*array.String)
+
+		for i := 0; i < int(out.Len()); i++ {
+			if deptArr.IsNull(i) {
+				if !out.IsNull(i) {
+					t.Fatalf("expected null at %d", i)
+				}
+				continue
+			}
+			expected := strings.ToUpper(deptArr.Value(i))
+			if out.Value(i) != expected {
+				t.Fatalf("UPPER mismatch at row %d: got %s, expected %s",
+					i, out.Value(i), expected)
+			}
+		}
+	})
+
+	t.Run("LowerFunction", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+		colDept := Expr.NewColumnResolve("department")
+
+		lowerExpr := Expr.NewScalarFunction(Expr.Lower, colDept)
+
+		// Evaluate: LOWER(department)
+		batch, err := src.Next(100)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		arr, err := Expr.EvalScalarFunction(lowerExpr, batch)
+		if err != nil {
+			t.Fatalf("lower eval failed: %v", err)
+		}
+
+		out := arr.(*array.String)
+
+		deptCol, _ := Expr.EvalExpression(colDept, batch)
+		deptArr := deptCol.(*array.String)
+
+		for i := 0; i < int(out.Len()); i++ {
+			if deptArr.IsNull(i) {
+				if !out.IsNull(i) {
+					t.Fatalf("expected null at %d", i)
+				}
+				continue
+			}
+			expected := strings.ToLower(deptArr.Value(i))
+			if out.Value(i) != expected {
+				t.Fatalf("LOWER mismatch at row %d: got %s, expected %s",
+					i, out.Value(i), expected)
+			}
+		}
+	})
+	t.Run("Abs", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+
+		fn := Expr.NewScalarFunction(Expr.Abs, Expr.NewColumnResolve("salary"))
+		exec, err := project.NewProjectExec(src, []Expr.Expression{fn})
+		if err != nil {
+			t.Fatalf("project init failed: %v", err)
+		}
+
+		batch, err := exec.Next(50)
+		if err != nil {
+			t.Fatalf("exec failed: %v", err)
+		}
+
+		out := batch.Columns[0].(*array.Float64)
+
+		for i := 0; i < out.Len(); i++ {
+			val := out.Value(i)
+			if val < 0 {
+				t.Fatalf("abs result should never be negative, got %v", val)
+			}
+		}
+	})
+
+	// ─────────────────────────────────────────────
+	// ROUND(salary)
+	// ─────────────────────────────────────────────
+	t.Run("Round", func(t *testing.T) {
+		src, _ := NewIntegrationSource1(mem)
+		_, col := generateIntegrationDataset1(mem)
+
+		fn := Expr.NewScalarFunction(Expr.Round, Expr.NewColumnResolve("salary"))
+		exec, err := project.NewProjectExec(src, []Expr.Expression{fn})
+		if err != nil {
+			t.Fatalf("project init failed: %v", err)
+		}
+
+		batch, err := exec.Next(50)
+		if err != nil {
+			t.Fatalf("exec failed: %v", err)
+		}
+
+		out := batch.Columns[0].(*array.Float64)
+		orig := col[4].(*array.Float64) // salary column
+
+		for i := 0; i < out.Len(); i++ {
+			expected := math.Round(orig.Value(i))
+			got := out.Value(i)
+
+			if expected != got {
+				t.Fatalf("round mismatch at %d: expected=%v got=%v", i, expected, got)
+			}
+		}
+	})
+}
+
+/*
+============================================================================
+Hash join tests
+============================================================================
+*/
+func TestHashJoinExec(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	t.Run("InnerJoin_SimpleDept", func(t *testing.T) {
+		src1, _ := NewIntegrationSource1(mem)
+		src2, _ := NewIntegrationSource2(mem)
+
+		clause := join.NewJoinClause(
+			[]Expr.Expression{Expr.NewColumnResolve("department")},
+			[]Expr.Expression{Expr.NewColumnResolve("department")},
+		)
+
+		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
+		if err != nil {
+			t.Fatalf("inner join init failed: %v", err)
+		}
+
+		batch, err := j.Next(1000)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		if batch.RowCount == 0 {
+			t.Fatalf("inner join returned zero rows (expected matches)")
+		}
+	})
+
+	t.Run("LeftJoin_AllLeftPreserved", func(t *testing.T) {
+		src1, _ := NewIntegrationSource1(mem)
+		src2, _ := NewIntegrationSource2(mem)
+
+		clause := join.NewJoinClause(
+			[]Expr.Expression{Expr.NewColumnResolve("region")},
+			[]Expr.Expression{Expr.NewColumnResolve("region")},
+		)
+
+		j, err := join.NewHashJoinExec(src1, src2, clause, join.LeftJoin, nil)
+		if err != nil {
+			t.Fatalf("left join init failed: %v", err)
+		}
+
+		batch, err := j.Next(1000)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		if batch.RowCount < 20 {
+			t.Fatalf("left join should preserve all 20 left rows, got %d", batch.RowCount)
+		}
+	})
+
+	t.Run("RightJoin_AllRightPreserved", func(t *testing.T) {
+		src1, _ := NewIntegrationSource1(mem)
+		src2, _ := NewIntegrationSource2(mem)
+
+		clause := join.NewJoinClause(
+			[]Expr.Expression{Expr.NewColumnResolve("region")},
+			[]Expr.Expression{Expr.NewColumnResolve("region")},
+		)
+
+		j, err := join.NewHashJoinExec(src1, src2, clause, join.RightJoin, nil)
+		if err != nil {
+			t.Fatalf("right join init failed: %v", err)
+		}
+
+		batch, err := j.Next(1000)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		if batch.RowCount < 20 {
+			t.Fatalf("right join should preserve all 20 right rows, got %d", batch.RowCount)
+		}
+	})
+
+	t.Run("InnerJoin_NoMatches", func(t *testing.T) {
+		src1, _ := NewIntegrationSource1(mem)
+		src2, _ := NewIntegrationSource2(mem)
+
+		// Join on unrelated keys → expect zero matches
+		clause := join.NewJoinClause(
+			[]Expr.Expression{Expr.NewColumnResolve("age")},
+			[]Expr.Expression{Expr.NewColumnResolve("dept_id")},
+		)
+
+		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
+		if err != nil {
+			t.Fatalf("inner join init failed: %v", err)
+		}
+
+		batch, err := j.Next(1000)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		if batch.RowCount != 0 {
+			t.Fatalf("expected zero matches, got %d", batch.RowCount)
+		}
+	})
+
+	t.Run("MultiColumnJoin", func(t *testing.T) {
+		src1, _ := NewIntegrationSource1(mem)
+		src2, _ := NewIntegrationSource2(mem)
+
+		clause := join.NewJoinClause(
+			[]Expr.Expression{
+				Expr.NewColumnResolve("department"),
+				Expr.NewColumnResolve("region"),
+			},
+			[]Expr.Expression{
+				Expr.NewColumnResolve("department"),
+				Expr.NewColumnResolve("region"),
+			},
+		)
+
+		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
+		if err != nil {
+			t.Fatalf("multi-col join init failed: %v", err)
+		}
+
+		batch, err := j.Next(1000)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		if batch.RowCount == 0 {
+			t.Fatalf("multi-column join should match some rows")
+		}
+	})
+
+	t.Run("InnerJoin_CheckSchemaPrefixed", func(t *testing.T) {
+		src1, _ := NewIntegrationSource1(mem)
+		src2, _ := NewIntegrationSource2(mem)
+
+		clause := join.NewJoinClause(
+			[]Expr.Expression{Expr.NewColumnResolve("department")},
+			[]Expr.Expression{Expr.NewColumnResolve("department")},
+		)
+
+		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
+		if err != nil {
+			t.Fatalf("join init failed: %v", err)
+		}
+
+		schema := j.Schema()
+
+		// Check prefixing (department exists on both sides)
+		foundLeft := false
+		foundRight := false
+
+		for _, f := range schema.Fields() {
+			if f.Name == "left_department" {
+				foundLeft = true
+			}
+			if f.Name == "right_department" {
+				foundRight = true
+			}
+		}
+
+		if !foundLeft || !foundRight {
+			t.Fatalf("schema prefixing failed: left_department=%v right_department=%v", foundLeft, foundRight)
+		}
+	})
 }

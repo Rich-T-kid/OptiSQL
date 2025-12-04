@@ -1,6 +1,7 @@
 package Expr
 
 import (
+	"fmt"
 	"log"
 	"opti-sql-go/operators"
 	"testing"
@@ -1686,4 +1687,134 @@ func TestNullCases(t *testing.T) {
 		t.Logf("\t%v\n", array)
 	})
 
+}
+func makeBatch(schema *arrow.Schema, cols []arrow.Array) *operators.RecordBatch {
+	return &operators.RecordBatch{
+		Schema:   schema,
+		Columns:  cols,
+		RowCount: uint64(cols[0].Len()),
+	}
+}
+
+func TestNullCheckExpr(t *testing.T) {
+
+	t.Run("int32_some_nulls_mask", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		// col = [10, null, 30, null, 50]
+		b := array.NewInt32Builder(mem)
+		b.AppendValues(
+			[]int32{10, 20, 30, 40, 50},
+			[]bool{true, false, true, false, true},
+		)
+		arr := b.NewArray()
+		b.Release()
+		defer arr.Release()
+
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: "col", Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+			},
+			nil,
+		)
+		batch := makeBatch(schema, []arrow.Array{arr})
+		t.Logf("%v\n", batch.PrettyPrint())
+		expr := NewColumnResolve("col")
+
+		maskArr, err := EvalNullCheckMask(expr, batch)
+		if err != nil {
+			t.Fatalf("EvalNullCheckMask failed: %v", err)
+		}
+		defer maskArr.Release()
+
+		boolMask := maskArr.(*array.Boolean)
+		fmt.Printf("boolean mask:\t%v\n", boolMask)
+		if boolMask.Len() != 5 {
+			t.Fatalf("expected length 5 mask, got %d", boolMask.Len())
+		}
+
+		// expected mask: [true, false, true, false, true]
+		want := []bool{true, false, true, false, true}
+
+		for i := 0; i < 5; i++ {
+			if boolMask.Value(i) != want[i] {
+				t.Fatalf("mask[%d]: expected %v, got %v", i, want[i], boolMask.Value(i))
+			}
+		}
+	})
+
+	// ───────────────────────────────────────────────
+
+	t.Run("string_all_nulls_mask", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+
+		b := array.NewStringBuilder(mem)
+		b.AppendValues([]string{"A", "B", "C"}, []bool{false, false, false})
+		arr := b.NewArray()
+		b.Release()
+		defer arr.Release()
+
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: "name", Type: arrow.BinaryTypes.String, Nullable: true},
+			},
+			nil,
+		)
+
+		batch := makeBatch(schema, []arrow.Array{arr})
+
+		expr := NewColumnResolve("name")
+
+		maskArr, err := EvalNullCheckMask(expr, batch)
+		if err != nil {
+			t.Fatalf("EvalNullCheckMask failed: %v", err)
+		}
+		defer maskArr.Release()
+
+		boolMask := maskArr.(*array.Boolean)
+
+		// expected: [false, false, false]
+		for i := 0; i < boolMask.Len(); i++ {
+			if boolMask.Value(i) != false {
+				t.Fatalf("expected all false, got true at row %d", i)
+			}
+		}
+	})
+
+	// ───────────────────────────────────────────────
+
+	t.Run("no_nulls_all_true_mask", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+
+		b := array.NewFloat64Builder(mem)
+		b.AppendValues([]float64{1.1, 2.2, 3.3}, []bool{true, true, true})
+		arr := b.NewArray()
+		b.Release()
+		defer arr.Release()
+
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: "val", Type: arrow.PrimitiveTypes.Float64, Nullable: false},
+			},
+			nil,
+		)
+
+		batch := makeBatch(schema, []arrow.Array{arr})
+
+		expr := NewColumnResolve("val")
+
+		maskArr, err := EvalNullCheckMask(expr, batch)
+		if err != nil {
+			t.Fatalf("EvalNullCheckMask failed: %v", err)
+		}
+		defer maskArr.Release()
+
+		boolMask := maskArr.(*array.Boolean)
+
+		// expected mask = [true, true, true]
+		for i := 0; i < boolMask.Len(); i++ {
+			if !boolMask.Value(i) {
+				t.Fatalf("expected true at %d, got false", i)
+			}
+		}
+	})
 }

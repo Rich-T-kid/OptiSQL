@@ -639,30 +639,24 @@ func (n *NullCheckExpr) String() string {
 	return fmt.Sprintf("NullCheck(%s)", n.Expr.String())
 }
 func EvalNullCheckMask(expr Expression, batch *operators.RecordBatch) (arrow.Array, error) {
-	// Step 1: Evaluate underlying expression → get its array
+	// Step 1: Evaluate underlying expression
 	arr, err := EvalExpression(expr, batch)
 	if err != nil {
 		return nil, err
 	}
+
 	length := arr.Len()
 
-	// Step 2: BooleanBuilder for the mask
+	// Step 2: Build boolean mask
 	builder := array.NewBooleanBuilder(memory.DefaultAllocator)
-	defer builder.Release()
-
 	builder.Resize(length)
 
-	// Step 3: Fill boolean mask (true = NOT NULL, false = NULL)
 	for i := 0; i < length; i++ {
-		if arr.IsNull(i) {
-			builder.Append(false)
-		} else {
-			builder.Append(true)
-		}
+		builder.Append(!arr.IsNull(i)) // true = not null
 	}
-
-	// Step 4: produce final boolean array
-	mask := builder.NewArray() // *array.Boolean
+	// Step 3: produce final Boolean array
+	mask := builder.NewArray()
+	builder.Release()
 	return mask, nil
 }
 

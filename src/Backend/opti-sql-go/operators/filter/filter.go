@@ -54,7 +54,6 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("boolean mask: %v\n", booleanMask)
 	boolArr, ok := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
 	if !ok {
 		return nil, errors.New("predicate did not evaluate to boolean array")
