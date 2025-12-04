@@ -1673,3 +1673,17 @@ func TestLikeOperatorSQL(t *testing.T) {
 		}
 	})
 }
+
+func TestNullCases(t *testing.T) {
+	t.Run("null Column literal", func(t *testing.T) {
+		v := NewLiteralResolve(arrow.Null, nil)
+		array, err := EvalExpression(v, &operators.RecordBatch{
+			RowCount: 10,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		t.Logf("\t%v\n", array)
+	})
+
+}

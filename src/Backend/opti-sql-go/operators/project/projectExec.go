@@ -41,6 +41,17 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 				Type:     tp,
 				Nullable: true,
 			}
+		case *Expr.ColumnResolve:
+			tp, err := Expr.ExprDataType(ex, input.Schema())
+			if err != nil {
+				return nil, fmt.Errorf("project exec: failed to get expression data type for expr %d: %w", i, err)
+			}
+			fields[i] = arrow.Field{
+				Name:     ex.Name,
+				Type:     tp,
+				Nullable: true,
+			}
+
 		default:
 			name := fmt.Sprintf("col_%d", i)
 			Type, err := Expr.ExprDataType(e, input.Schema())

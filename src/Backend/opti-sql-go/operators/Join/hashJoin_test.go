@@ -192,22 +192,6 @@ func TestJoinSchemas(t *testing.T) {
 	}
 }
 
-func TestHashJoin1(t *testing.T) {
-	t.Run("playground", func(t *testing.T) {
-		left, right := newSources()
-		joinPred := NewJoinClause(Expr.NewExpressions(Expr.NewColumnResolve("id")), Expr.NewExpressions(Expr.NewColumnResolve("id")))
-		smjExec, err := NewHashJoinExec(left, right, joinPred, InnerJoin, nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		v, _ := smjExec.Next(5)
-		t.Logf("expected schema:\t\n%v\n\n", smjExec.Schema())
-		t.Logf("recieved schema:\t\n%v\n\n", v.Schema)
-		t.Logf("\t\n\n\t%+v\n", v.PrettyPrint())
-
-	})
-}
-
 // collectAllRows drains an operator into a slice of *operators.RecordBatch.
 func collectAllRows(t *testing.T, op operators.Operator) []*operators.RecordBatch {
 	t.Helper()

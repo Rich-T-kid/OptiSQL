@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
@@ -43,12 +44,17 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}
 	childBatch, err := f.input.Next(n)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			f.done = true
+			return nil, io.EOF
+		}
 		return nil, err
 	}
 	booleanMask, err := Expr.EvalExpression(f.predicate, childBatch)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("boolean mask: %v\n", booleanMask)
 	boolArr, ok := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
 	if !ok {
 		return nil, errors.New("predicate did not evaluate to boolean array")
@@ -122,6 +128,8 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 		if err != nil {
 			return false
 		}
+		//TODO: allow for nulls to be comparable
+		fmt.Printf("dt1:\t%v\ndt2:\t%v\n", dt1, dt2)
 		if !arrow.TypeEqual(dt1, dt2) {
 			return false
 		}
@@ -132,6 +140,8 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 	case *Expr.LiteralResolve:
 		return true
 
+	case *Expr.NullCheckExpr:
+		return validPredicates(p.Expr, schema)
 	default:
 		return false
 	}

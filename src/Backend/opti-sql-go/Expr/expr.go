@@ -105,6 +105,8 @@ func EvalExpression(expr Expression, batch *operators.RecordBatch) (arrow.Array,
 		return EvalScalarFunction(e, batch)
 	case *CastExpr:
 		return EvalCast(e, batch)
+	case *NullCheckExpr:
+		return EvalNullCheckMask(e.Expr, batch)
 	default:
 		return nil, ErrUnsupportedExpression(expr.String())
 	}
@@ -146,6 +148,8 @@ func ExprDataType(e Expression, inputSchema *arrow.Schema) (arrow.DataType, erro
 			return nil, err
 		}
 		return inferScalarFunctionType(ex.Function, argType), nil
+	case *NullCheckExpr:
+		return arrow.FixedWidthTypes.Boolean, nil
 
 	default:
 		return nil, ErrUnsupportedExpression(ex.String())
@@ -355,6 +359,16 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 			b.Append(v)
 		}
 		return b.NewArray(), nil
+	// ------------------------------
+	// Nulls
+	// ------------------------------
+	case arrow.NULL:
+		b := array.NewNullBuilder(memory.DefaultAllocator)
+		defer b.Release()
+		for i := 0; i < n; i++ {
+			b.AppendNull()
+		}
+		return b.NewArray(), nil
 
 	default:
 		return nil, fmt.Errorf("literal type %s not supported", l.Type)
@@ -518,6 +532,7 @@ func unpackDatum(d compute.Datum) (arrow.Array, error) {
 	if !ok {
 		return nil, fmt.Errorf("datum %v is not of type array", d)
 	}
+	fmt.Printf("unpackDatum: array str: \t%v\n", array.String())
 	return array.MakeArray(), nil
 }
 
@@ -610,6 +625,45 @@ func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
 func (c *CastExpr) ExprNode() {}
 func (c *CastExpr) String() string {
 	return fmt.Sprintf("Cast(%s AS %s)", c.Expr, c.TargetType)
+}
+
+type NullCheckExpr struct {
+	Expr Expression
+}
+
+func NewNullCheckExpr(expr Expression) *NullCheckExpr {
+	return &NullCheckExpr{Expr: expr}
+}
+func (n *NullCheckExpr) ExprNode() {}
+func (n *NullCheckExpr) String() string {
+	return fmt.Sprintf("NullCheck(%s)", n.Expr.String())
+}
+func EvalNullCheckMask(expr Expression, batch *operators.RecordBatch) (arrow.Array, error) {
+	// Step 1: Evaluate underlying expression → get its array
+	arr, err := EvalExpression(expr, batch)
+	if err != nil {
+		return nil, err
+	}
+	length := arr.Len()
+
+	// Step 2: BooleanBuilder for the mask
+	builder := array.NewBooleanBuilder(memory.DefaultAllocator)
+	defer builder.Release()
+
+	builder.Resize(length)
+
+	// Step 3: Fill boolean mask (true = NOT NULL, false = NULL)
+	for i := 0; i < length; i++ {
+		if arr.IsNull(i) {
+			builder.Append(false)
+		} else {
+			builder.Append(true)
+		}
+	}
+
+	// Step 4: produce final boolean array
+	mask := builder.NewArray() // *array.Boolean
+	return mask, nil
 }
 
 func upperImpl(arr arrow.Array) (arrow.Array, error) {
