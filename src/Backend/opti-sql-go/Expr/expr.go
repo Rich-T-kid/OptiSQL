@@ -260,7 +260,6 @@ func NewLiteralResolve(Type arrow.DataType, Value any) *LiteralResolve {
 			castVal = float64(v)
 		}
 	default:
-		fmt.Printf("%v did not match any case, of type %T\n", v, v)
 		castVal = Value
 	}
 	return &LiteralResolve{Type: Type, Value: castVal}
@@ -447,37 +446,36 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	if err != nil {
 		return nil, err
 	}
+	ctx := context.Background()
 	opt := compute.ArithmeticOptions{}
 	switch b.Op {
 	// arithmetic
 	case Addition:
-		datum, err := compute.Add(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Add(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 	case Subtraction:
-		datum, err := compute.Subtract(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Subtract(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 
 	case Multiplication:
-		datum, err := compute.Multiply(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Multiply(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 	case Division:
-		datum, err := compute.Divide(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Divide(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 
-	// comparisions TODO:
-	// These return a boolean array
 	case Equal:
 		if leftArr.DataType() != rightArr.DataType() {
 			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
@@ -592,6 +590,7 @@ func NewScalarFunction(function supportedFunctions, Argument Expression) *Scalar
 }
 
 func EvalScalarFunction(s *ScalarFunction, batch *operators.RecordBatch) (arrow.Array, error) {
+	ctx := context.Background()
 	switch s.Function {
 	case Upper:
 		arr, err := EvalExpression(s.Arguments, batch)
@@ -611,7 +610,7 @@ func EvalScalarFunction(s *ScalarFunction, batch *operators.RecordBatch) (arrow.
 		if err != nil {
 			return nil, err
 		}
-		datum, err := compute.AbsoluteValue(context.TODO(), compute.ArithmeticOptions{}, compute.NewDatum(arr))
+		datum, err := compute.AbsoluteValue(ctx, compute.ArithmeticOptions{}, compute.NewDatum(arr))
 		if err != nil {
 			return nil, err
 		}
@@ -621,7 +620,7 @@ func EvalScalarFunction(s *ScalarFunction, batch *operators.RecordBatch) (arrow.
 		if err != nil {
 			return nil, err
 		}
-		datum, err := compute.Round(context.TODO(), compute.DefaultRoundOptions, compute.NewDatum(arr))
+		datum, err := compute.Round(ctx, compute.DefaultRoundOptions, compute.NewDatum(arr))
 		if err != nil {
 			return nil, err
 		}
@@ -656,7 +655,7 @@ func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
 
 	// Use Arrow compute kernel to cast
 	castOpts := compute.SafeCastOptions(c.TargetType)
-	out, err := compute.CastArray(context.TODO(), arr, castOpts)
+	out, err := compute.CastArray(context.Background(), arr, castOpts)
 	if err != nil {
 		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
 			arr.DataType(), c.TargetType, err)

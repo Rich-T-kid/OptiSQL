@@ -834,10 +834,3 @@ func TestProjectExec_FunctionExpr(t *testing.T) {
 		}
 	})
 }
-
-/*
-complex expr
-ex: alias(function(column |operator| literal) |operator| literal)
-TODO: not the most important thing right now since we know basic expression are fine
-*/
-func TestProjectExec_ComplexExpr(t *testing.T) {}

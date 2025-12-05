@@ -150,7 +150,6 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 		if schema == nil {
 			t.Fatalf("schema should not be nil")
 		}
-		fmt.Println(schema)
 
 		// group-by + 1 agg = 2 fields
 		if got, want := schema.NumFields(), 2; got != want {
@@ -198,7 +197,6 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 		}
 
 		schema := gb.Schema()
-		fmt.Printf("schema: %v\n", schema)
 		wantFields := len(groupBy) + len(aggs)
 		if schema.NumFields() != wantFields {
 			t.Fatalf("expected %d fields, got %d", wantFields, schema.NumFields())

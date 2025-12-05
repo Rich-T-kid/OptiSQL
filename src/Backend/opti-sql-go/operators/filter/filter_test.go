@@ -2,7 +2,6 @@ package filter
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"testing"
@@ -333,16 +332,14 @@ func TestFilterBuffer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create filter exec: %v", err)
 		}
-		rc, err := f.Next(5)
+		_, err = f.Next(5)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		fmt.Printf("First Batch:\t%v\n", rc.PrettyPrint())
-		rc, err = f.Next(5)
+		_, err = f.Next(5)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		fmt.Printf("second Batch:\t%v\n", rc.PrettyPrint())
 
 	})
 }

@@ -49,7 +49,7 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	rdr, err := arrowReader.GetRecordReader(context.TODO(), nil, nil)
+	rdr, err := arrowReader.GetRecordReader(context.Background(), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*Parq
 		wantedColumnsIDX = append(wantedColumnsIDX, idx_array...)
 	}
 
-	rdr, err := arrowReader.GetRecordReader(context.TODO(), wantedColumnsIDX, nil)
+	rdr, err := arrowReader.GetRecordReader(context.Background(), wantedColumnsIDX, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package Expr
 
 import (
-	"fmt"
 	"log"
 	"opti-sql-go/operators"
 	"testing"
@@ -1727,7 +1726,6 @@ func TestNullCheckExpr(t *testing.T) {
 		defer maskArr.Release()
 
 		boolMask := maskArr.(*array.Boolean)
-		fmt.Printf("boolean mask:\t%v\n", boolMask)
 		if boolMask.Len() != 5 {
 			t.Fatalf("expected length 5 mask, got %d", boolMask.Len())
 		}

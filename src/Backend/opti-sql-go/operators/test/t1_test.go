@@ -2,7 +2,6 @@ package test
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"math"
 	"opti-sql-go/Expr"
@@ -991,7 +990,6 @@ func TestHavingExec(t *testing.T) {
 		)
 
 		hv, _ := aggr.NewHavingExec(gb, having)
-		fmt.Printf("\t%v\n", hv.Schema())
 		batch, err := hv.Next(500)
 		if err != nil {
 			t.Fatalf("having next failed: %v", err)

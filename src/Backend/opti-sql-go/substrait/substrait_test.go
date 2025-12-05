@@ -31,13 +31,13 @@ func TestDummyInput(t *testing.T) {
 	dummyRequest := &QueryExecutionRequest{
 		SqlStatement:     "SELECT * FROM table",
 		SubstraitLogical: []byte("CgJTUxIMCgpTZWxlY3QgKiBGUk9NIHRhYmxl"),
-		Id:               "GenerateDTODOHaasdavdasvasdvada",
+		Id:               "GenerateDTMoneyOHaasdavdasvasdvada",
 		Source: &SourceType{
 			S3Source: "s3://my-bucket/data/table.parquet",
 			Mime:     "application/vnd.apache.parquet",
 		},
 	}
-	resp, err := ss.ExecuteQuery(context.TODO(), dummyRequest)
+	resp, err := ss.ExecuteQuery(context.Background(), dummyRequest)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}

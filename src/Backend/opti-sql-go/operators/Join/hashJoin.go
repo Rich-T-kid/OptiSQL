@@ -17,10 +17,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
-// TODO: clean up PR and push again
-// TODO: write intergration test for operators to work together
 // TODO: see ticket #27
-// TODO: take small break from this project to work on inverted index search for a couple days
 
 var (
 	ErrInvalidJoinClauseCount = func(l, r int) error {
@@ -395,7 +392,7 @@ func (hj *HashJoinExec) buildOutputArrays(
 	leftIdxArr arrow.Array,
 	rightIdxArr arrow.Array,
 ) ([]arrow.Array, error) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	output := make([]arrow.Array, hj.schema.NumFields())
 	for i := range len(leftCols) {

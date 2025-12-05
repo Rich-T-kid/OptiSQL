@@ -119,7 +119,7 @@ func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
 		idxArray := idxToArrowArray(idx, mem)
 		defer idxArray.Release()
 		for i := range len(allColumns) {
-			arr, err := compute.TakeArray(context.TODO(), allColumns[i], idxArray)
+			arr, err := compute.TakeArray(context.Background(), allColumns[i], idxArray)
 			if err != nil {
 				return nil, err
 			}
@@ -160,7 +160,7 @@ func (s *SortExec) Close() error {
 	return s.input.Close()
 }
 func (s *SortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]arrow.Array, error) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	resultColumns := make([]arrow.Array, len(s.schema.Fields()))
 	offsetArray := genoffsetTakeIdx(s.consumedOffset, readsize, mem)
 	defer offsetArray.Release()
@@ -347,7 +347,7 @@ func joinArrays(existing, newarrs []arrow.Array, mem memory.Allocator) ([]arrow.
 }
 
 func (t *TopKSortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]arrow.Array, error) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	resultColumns := make([]arrow.Array, len(t.schema.Fields()))
 	offsetArray := genoffsetTakeIdx(t.consumedOffset, readsize, mem)
 	defer offsetArray.Release()

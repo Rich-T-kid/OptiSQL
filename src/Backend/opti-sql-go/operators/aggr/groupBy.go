@@ -433,7 +433,6 @@ func buildDynamicArray(mem memory.Allocator, dt arrow.DataType, values []any) ar
 	case arrow.BOOL:
 		b := array.NewBooleanBuilder(mem)
 		for _, v := range values {
-			fmt.Printf("values:%v type:%T\n", v, v)
 			if v == nil {
 				b.AppendNull()
 			} else {

@@ -456,7 +456,6 @@ func TestGroupByAggregation(t *testing.T) {
 	// (5.B) SELECT is_active, COUNT(*) AS active_count, AVG(age_years) AS avg_age FROM source1 GROUP BY is_active;
 	t.Run("5B", func(t *testing.T) {
 		src := source1Project()
-		fmt.Printf("\t%v\n", src.Schema())
 		groupBy := []Expr.Expression{Expr.NewColumnResolve("is_active")}
 		aggs := []aggr.AggregateFunctions{
 			aggr.NewAggregateFunctions(aggr.Count, Expr.NewColumnResolve("id")),
@@ -568,7 +567,6 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("join init failed: %v", err)
 		}
-		fmt.Printf("schema:%v\n", j.Schema())
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age_years"),
 			Expr.GreaterThan,
