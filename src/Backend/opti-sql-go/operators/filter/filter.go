@@ -168,6 +168,7 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 		if !arrow.TypeEqual(dt1, dt2) {
 			return false
 		}
+		fmt.Printf("left:\t%v\nright:\t%v\n", p.Left, p.Right)
 		// recursively validate children
 		return validPredicates(p.Left, schema) &&
 			validPredicates(p.Right, schema)
@@ -177,6 +178,8 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 
 	case *Expr.NullCheckExpr:
 		return validPredicates(p.Expr, schema)
+	case *Expr.ScalarFunction:
+		return true
 	default:
 		return false
 	}

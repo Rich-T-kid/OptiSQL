@@ -430,6 +430,17 @@ func buildDynamicArray(mem memory.Allocator, dt arrow.DataType, values []any) ar
 	// ===========================
 	// UNSUPPORTED TYPE
 	// ===========================
+	case arrow.BOOL:
+		b := array.NewBooleanBuilder(mem)
+		for _, v := range values {
+			fmt.Printf("values:%v type:%T\n", v, v)
+			if v == nil {
+				b.AppendNull()
+			} else {
+				b.Append(castToBool(v))
+			}
+		}
+		return b.NewArray()
 	default:
 		panic(fmt.Sprintf("unsupported dynamic array type: %v", dt))
 	}
@@ -439,4 +450,10 @@ func buildFloatArray(mem memory.Allocator, values []float64) arrow.Array {
 	b := array.NewFloat64Builder(mem)
 	b.AppendValues(values, nil)
 	return b.NewArray()
+}
+func castToBool(v any) bool {
+	if v == "true" || v == true {
+		return true
+	}
+	return false
 }

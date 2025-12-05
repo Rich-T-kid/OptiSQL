@@ -263,7 +263,6 @@ func NewLiteralResolve(Type arrow.DataType, Value any) *LiteralResolve {
 		fmt.Printf("%v did not match any case, of type %T\n", v, v)
 		castVal = Value
 	}
-	fmt.Printf("sotred as -> %v\t%v\n", Type, castVal)
 	return &LiteralResolve{Type: Type, Value: castVal}
 }
 func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, error) {
