@@ -266,7 +266,7 @@ func validAggrType(dt arrow.DataType) bool {
 }
 
 func castArrayToFloat64(arr arrow.Array) (arrow.Array, error) {
-	outDatum, err := compute.CastArray(context.TODO(), arr, compute.NewCastOptions(&arrow.Float64Type{}, true))
+	outDatum, err := compute.CastArray(context.Background(), arr, compute.NewCastOptions(&arrow.Float64Type{}, true))
 	if err != nil {
 		return nil, err
 	}

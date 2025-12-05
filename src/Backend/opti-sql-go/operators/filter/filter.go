@@ -122,7 +122,7 @@ func (f *FilterExec) Close() error {
 
 func ApplyBooleanMask(col arrow.Array, mask *array.Boolean) (arrow.Array, error) {
 	datum, err := compute.Filter(
-		context.TODO(),
+		context.Background(),
 		compute.NewDatum(col),
 		compute.NewDatum(mask),
 		*compute.DefaultFilterOptions(),
@@ -163,12 +163,11 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 		if err != nil {
 			return false
 		}
-		//TODO: allow for nulls to be comparable
 		fmt.Printf("dt1:\t%v\ndt2:\t%v\n", dt1, dt2)
 		if !arrow.TypeEqual(dt1, dt2) {
 			return false
 		}
-		// recursively validate children
+		fmt.Printf("left:\t%v\nright:\t%v\n", p.Left, p.Right)
 		return validPredicates(p.Left, schema) &&
 			validPredicates(p.Right, schema)
 
@@ -177,6 +176,8 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 
 	case *Expr.NullCheckExpr:
 		return validPredicates(p.Expr, schema)
+	case *Expr.ScalarFunction:
+		return true
 	default:
 		return false
 	}
@@ -215,16 +216,17 @@ func (f *FilterExec) sliceFilterCols(n int64, mem memory.Allocator) ([]arrow.Arr
 	defer keepArr.Release()
 
 	// For each column: materialize output slice + update buffer
+	ctx := context.Background()
 	for i, col := range f.bufferedCols {
 		// emit slice
-		sliceOut, err := compute.TakeArray(context.TODO(), col, emitArr)
+		sliceOut, err := compute.TakeArray(ctx, col, emitArr)
 		if err != nil {
 			return nil, err
 		}
 		out[i] = sliceOut
 
 		// keep remaining slice
-		keepSlice, err := compute.TakeArray(context.TODO(), col, keepArr)
+		keepSlice, err := compute.TakeArray(ctx, col, keepArr)
 		if err != nil {
 			return nil, err
 		}

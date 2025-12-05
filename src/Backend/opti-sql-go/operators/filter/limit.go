@@ -110,6 +110,7 @@ func (d *DistinctExec) Next(n uint16) (*operators.RecordBatch, error) {
 		return nil, io.EOF
 	}
 	mem := memory.NewGoAllocator()
+	ctx := context.Background()
 	if !d.consumedInput {
 		for {
 			childBatch, err := d.input.Next(math.MaxUint16)
@@ -161,7 +162,7 @@ func (d *DistinctExec) Next(n uint16) (*operators.RecordBatch, error) {
 			takeArray := idxToArrowArray(idxTracker, mem)
 			for i := range len(childBatch.Columns) {
 				largeArray := childBatch.Columns[i]
-				uniqueElements, err := compute.TakeArray(context.TODO(), largeArray, takeArray)
+				uniqueElements, err := compute.TakeArray(ctx, largeArray, takeArray)
 				if err != nil {
 					return nil, err
 				}
@@ -209,7 +210,7 @@ func (d *DistinctExec) Close() error {
 	return d.input.Close()
 }
 func (d *DistinctExec) consumeDistinctArrays(readSize uint64, mem memory.Allocator) ([]arrow.Array, error) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	resultColumns := make([]arrow.Array, len(d.schema.Fields()))
 	offsetArray := genoffsetTakeIdx(d.consumedOffset, readSize, mem)
 	defer offsetArray.Release()

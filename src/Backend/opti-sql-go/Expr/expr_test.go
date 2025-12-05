@@ -1,7 +1,6 @@
 package Expr
 
 import (
-	"fmt"
 	"log"
 	"opti-sql-go/operators"
 	"testing"
@@ -1550,7 +1549,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name starts with a", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "A%"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
 			t.Fatalf("unexpected error from EvalExpression")
@@ -1572,7 +1571,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name contains li", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "%li%"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1624,7 +1623,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name is exactly 5 letters", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "_____"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1650,7 +1649,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name starts with Ch", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "Ch%"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1727,7 +1726,6 @@ func TestNullCheckExpr(t *testing.T) {
 		defer maskArr.Release()
 
 		boolMask := maskArr.(*array.Boolean)
-		fmt.Printf("boolean mask:\t%v\n", boolMask)
 		if boolMask.Len() != 5 {
 			t.Fatalf("expected length 5 mask, got %d", boolMask.Len())
 		}
