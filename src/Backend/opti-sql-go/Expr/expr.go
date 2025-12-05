@@ -105,6 +105,8 @@ func EvalExpression(expr Expression, batch *operators.RecordBatch) (arrow.Array,
 		return EvalScalarFunction(e, batch)
 	case *CastExpr:
 		return EvalCast(e, batch)
+	case *NullCheckExpr:
+		return EvalNullCheckMask(e.Expr, batch)
 	default:
 		return nil, ErrUnsupportedExpression(expr.String())
 	}
@@ -146,6 +148,8 @@ func ExprDataType(e Expression, inputSchema *arrow.Schema) (arrow.DataType, erro
 			return nil, err
 		}
 		return inferScalarFunctionType(ex.Function, argType), nil
+	case *NullCheckExpr:
+		return arrow.FixedWidthTypes.Boolean, nil
 
 	default:
 		return nil, ErrUnsupportedExpression(ex.String())
@@ -215,7 +219,50 @@ type LiteralResolve struct {
 }
 
 func NewLiteralResolve(Type arrow.DataType, Value any) *LiteralResolve {
-	return &LiteralResolve{Type: Type, Value: Value}
+	var castVal any
+
+	switch v := Value.(type) {
+
+	// ------------------------------------------------------
+	// INT → cast based on Arrow integer type
+	// ------------------------------------------------------
+	case int:
+		switch Type.ID() {
+		case arrow.INT8:
+			castVal = int8(v)
+		case arrow.INT16:
+			castVal = int16(v)
+		case arrow.INT32:
+			castVal = int32(v)
+		case arrow.INT64:
+			castVal = int64(v)
+		case arrow.UINT8:
+			castVal = uint8(v)
+		case arrow.UINT16:
+			castVal = uint16(v)
+		case arrow.UINT32:
+			castVal = uint32(v)
+		case arrow.UINT64:
+			castVal = uint64(v)
+		default:
+			// not an integer Arrow type → store original
+			castVal = v
+		}
+	case string:
+		castVal = string(v)
+	case bool:
+		castVal = bool(v)
+	case float64:
+		switch Type.ID() {
+		case arrow.FLOAT32:
+			castVal = float32(v)
+		case arrow.FLOAT64:
+			castVal = float64(v)
+		}
+	default:
+		castVal = Value
+	}
+	return &LiteralResolve{Type: Type, Value: castVal}
 }
 func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, error) {
 	n := int(batch.RowCount)
@@ -355,6 +402,16 @@ func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, 
 			b.Append(v)
 		}
 		return b.NewArray(), nil
+	// ------------------------------
+	// Nulls
+	// ------------------------------
+	case arrow.NULL:
+		b := array.NewNullBuilder(memory.DefaultAllocator)
+		defer b.Release()
+		for i := 0; i < n; i++ {
+			b.AppendNull()
+		}
+		return b.NewArray(), nil
 
 	default:
 		return nil, fmt.Errorf("literal type %s not supported", l.Type)
@@ -389,37 +446,36 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	if err != nil {
 		return nil, err
 	}
+	ctx := context.Background()
 	opt := compute.ArithmeticOptions{}
 	switch b.Op {
 	// arithmetic
 	case Addition:
-		datum, err := compute.Add(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Add(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 	case Subtraction:
-		datum, err := compute.Subtract(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Subtract(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 
 	case Multiplication:
-		datum, err := compute.Multiply(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Multiply(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 	case Division:
-		datum, err := compute.Divide(context.TODO(), opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
+		datum, err := compute.Divide(ctx, opt, compute.NewDatum(leftArr), compute.NewDatum(rightArr))
 		if err != nil {
 			return nil, err
 		}
 		return unpackDatum(datum)
 
-	// comparisions TODO:
-	// These return a boolean array
 	case Equal:
 		if leftArr.DataType() != rightArr.DataType() {
 			return nil, ErrCantCompareDifferentTypes(leftArr.DataType(), rightArr.DataType())
@@ -495,7 +551,6 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 		return unpackDatum(datum)
 	case Like:
 		if leftArr.DataType() != arrow.BinaryTypes.String || rightArr.DataType() != arrow.BinaryTypes.String {
-			// regEx runs only on strings
 			return nil, errors.New("binary operator Like only works on arrays of strings")
 		}
 		var compiledRegEx = compileSqlRegEx(rightArr.ValueStr(0))
@@ -503,7 +558,6 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 		leftStrArray := leftArr.(*array.String)
 		for i := 0; i < leftStrArray.Len(); i++ {
 			valid := validRegEx(leftStrArray.Value(i), compiledRegEx)
-			fmt.Printf("does %s match %s: %v\n", leftStrArray.Value(i), compiledRegEx, valid)
 			filterBuilder.Append(valid)
 		}
 		return filterBuilder.NewArray(), nil
@@ -536,6 +590,7 @@ func NewScalarFunction(function supportedFunctions, Argument Expression) *Scalar
 }
 
 func EvalScalarFunction(s *ScalarFunction, batch *operators.RecordBatch) (arrow.Array, error) {
+	ctx := context.Background()
 	switch s.Function {
 	case Upper:
 		arr, err := EvalExpression(s.Arguments, batch)
@@ -555,7 +610,7 @@ func EvalScalarFunction(s *ScalarFunction, batch *operators.RecordBatch) (arrow.
 		if err != nil {
 			return nil, err
 		}
-		datum, err := compute.AbsoluteValue(context.TODO(), compute.ArithmeticOptions{}, compute.NewDatum(arr))
+		datum, err := compute.AbsoluteValue(ctx, compute.ArithmeticOptions{}, compute.NewDatum(arr))
 		if err != nil {
 			return nil, err
 		}
@@ -565,7 +620,7 @@ func EvalScalarFunction(s *ScalarFunction, batch *operators.RecordBatch) (arrow.
 		if err != nil {
 			return nil, err
 		}
-		datum, err := compute.Round(context.TODO(), compute.DefaultRoundOptions, compute.NewDatum(arr))
+		datum, err := compute.Round(ctx, compute.DefaultRoundOptions, compute.NewDatum(arr))
 		if err != nil {
 			return nil, err
 		}
@@ -600,9 +655,8 @@ func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
 
 	// Use Arrow compute kernel to cast
 	castOpts := compute.SafeCastOptions(c.TargetType)
-	out, err := compute.CastArray(context.TODO(), arr, castOpts)
+	out, err := compute.CastArray(context.Background(), arr, castOpts)
 	if err != nil {
-		// This is a runtime cast error
 		return nil, fmt.Errorf("cast error: cannot cast %s to %s: %w",
 			arr.DataType(), c.TargetType, err)
 	}
@@ -613,6 +667,39 @@ func EvalCast(c *CastExpr, batch *operators.RecordBatch) (arrow.Array, error) {
 func (c *CastExpr) ExprNode() {}
 func (c *CastExpr) String() string {
 	return fmt.Sprintf("Cast(%s AS %s)", c.Expr, c.TargetType)
+}
+
+type NullCheckExpr struct {
+	Expr Expression
+}
+
+func NewNullCheckExpr(expr Expression) *NullCheckExpr {
+	return &NullCheckExpr{Expr: expr}
+}
+func (n *NullCheckExpr) ExprNode() {}
+func (n *NullCheckExpr) String() string {
+	return fmt.Sprintf("NullCheck(%s)", n.Expr.String())
+}
+func EvalNullCheckMask(expr Expression, batch *operators.RecordBatch) (arrow.Array, error) {
+	// Step 1: Evaluate underlying expression
+	arr, err := EvalExpression(expr, batch)
+	if err != nil {
+		return nil, err
+	}
+
+	length := arr.Len()
+
+	// Step 2: Build boolean mask
+	builder := array.NewBooleanBuilder(memory.DefaultAllocator)
+	builder.Resize(length)
+
+	for i := 0; i < length; i++ {
+		builder.Append(!arr.IsNull(i)) // true = not null
+	}
+	// Step 3: produce final Boolean array
+	mask := builder.NewArray()
+	builder.Release()
+	return mask, nil
 }
 
 func upperImpl(arr arrow.Array) (arrow.Array, error) {

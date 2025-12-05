@@ -92,7 +92,6 @@ var configInstance *Config = &Config{
 		EnableQueryStats:   true,
 		EnableMemoryStats:  true,
 	},
-	// TODO: remove hardcoded secretes before production. we are just testing for now
 	Secretes: secretesConfig{
 		AccessKey:   "DO8013ZT6VDHJ2EM94RN",
 		SecretKey:   "kPvQSMt6naiwe/FhDnzXpYmVE5yzJUsIR0/OJpsUNzo",

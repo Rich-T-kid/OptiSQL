@@ -34,7 +34,6 @@ schema:
 	   metadata: ["PARQUET:field_id": "-1"]
 	  - lon: type=float64, nullable
 */
-// TODO: more to their own files later down the line
 func existIn(str string, arr []string) bool {
 	for _, a := range arr {
 		if a == str {

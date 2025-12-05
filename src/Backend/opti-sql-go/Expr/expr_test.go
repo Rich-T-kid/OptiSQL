@@ -1124,7 +1124,7 @@ func TestInferScalarFunctionType(t *testing.T) {
 // test constructor methods for expressions
 func TestExprInitMethods(t *testing.T) {
 	t.Run("New Alias", func(t *testing.T) {
-		literal := NewLiteralResolve(arrow.BinaryTypes.String, string("the golfer"))
+		literal := NewLiteralResolve(arrow.BinaryTypes.String, "the golfer")
 		a := NewAlias(literal, "nickname")
 		if a == nil {
 			t.Fatalf("failed to create Alias expression")
@@ -1137,35 +1137,35 @@ func TestExprInitMethods(t *testing.T) {
 		}
 	})
 	t.Run("New LiteralResolve", func(t *testing.T) {
-		lit := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(42))
+		lit := NewLiteralResolve(arrow.PrimitiveTypes.Int32, 42)
 		if lit == nil {
 			t.Fatalf("failed to create LiteralResolve expression")
 		}
 	})
 	t.Run("New BinaryExpr", func(t *testing.T) {
-		left := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(10))
-		right := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(5))
+		left := NewLiteralResolve(arrow.PrimitiveTypes.Int32, 10)
+		right := NewLiteralResolve(arrow.PrimitiveTypes.Int32, 5)
 		be := NewBinaryExpr(left, Addition, right)
 		if be == nil {
 			t.Fatalf("failed to create BinaryExpr expression")
 		}
 	})
 	t.Run("New ScalarFunc", func(t *testing.T) {
-		arg := NewLiteralResolve(arrow.BinaryTypes.String, string("hello"))
+		arg := NewLiteralResolve(arrow.BinaryTypes.String, "hello")
 		sf := NewScalarFunction(Upper, arg)
 		if sf == nil {
 			t.Fatalf("failed to create ScalarFunction expression")
 		}
 	})
 	t.Run("New CastExpr", func(t *testing.T) {
-		expr := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(100))
+		expr := NewLiteralResolve(arrow.PrimitiveTypes.Int32, 100)
 		ce := NewCastExpr(expr, arrow.PrimitiveTypes.Float64)
 		if ce == nil {
 			t.Fatalf("failed to create CastExpr expression")
 		}
 	})
 	t.Run("New Expressions", func(t *testing.T) {
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(7))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, 7)
 		cr := NewColumnResolve("score")
 		left := NewBinaryExpr(literal, Multiplication, cr)
 		sf := NewScalarFunction(Abs, left)
@@ -1182,7 +1182,7 @@ func TestExprInitMethods(t *testing.T) {
 func TestFilterBinaryExpr(t *testing.T) {
 	t.Run("age == 22", func(t *testing.T) {
 		rc := generateTestColumns() //4
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(22))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, (22))
 		col := NewColumnResolve("age")
 		be := NewBinaryExpr(col, Equal, literal)
 		arr, err := EvalExpression(be, rc)
@@ -1203,7 +1203,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 	})
 	t.Run("age != 22", func(t *testing.T) {
 		rc := generateTestColumns()
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(22))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, (22))
 		col := NewColumnResolve("age")
 		be := NewBinaryExpr(col, NotEqual, literal)
 
@@ -1226,7 +1226,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 	})
 	t.Run("age < 34", func(t *testing.T) {
 		rc := generateTestColumns()
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(34))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, (34))
 		col := NewColumnResolve("age")
 		be := NewBinaryExpr(col, LessThan, literal)
 
@@ -1249,7 +1249,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 	})
 	t.Run("age <= 34", func(t *testing.T) {
 		rc := generateTestColumns()
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(34))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, (34))
 		col := NewColumnResolve("age")
 		be := NewBinaryExpr(col, LessThanOrEqual, literal)
 
@@ -1272,7 +1272,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 	})
 	t.Run("age > 30", func(t *testing.T) {
 		rc := generateTestColumns()
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, (30))
 		col := NewColumnResolve("age")
 		be := NewBinaryExpr(col, GreaterThan, literal)
 
@@ -1295,7 +1295,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 	})
 	t.Run("age >= 34", func(t *testing.T) {
 		rc := generateTestColumns()
-		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(34))
+		literal := NewLiteralResolve(arrow.PrimitiveTypes.Int32, (34))
 		col := NewColumnResolve("age")
 		be := NewBinaryExpr(col, GreaterThanOrEqual, literal)
 
@@ -1322,7 +1322,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 		left := NewBinaryExpr(
 			NewColumnResolve("age"),
 			GreaterThan,
-			NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+			NewLiteralResolve(arrow.PrimitiveTypes.Int32, (30)),
 		)
 
 		right := NewBinaryExpr(
@@ -1352,7 +1352,7 @@ func TestFilterBinaryExpr(t *testing.T) {
 		left := NewBinaryExpr(
 			NewColumnResolve("age"),
 			LessThan,
-			NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+			NewLiteralResolve(arrow.PrimitiveTypes.Int32, (30)),
 		)
 
 		right := NewBinaryExpr(
@@ -1549,7 +1549,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name starts with a", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "A%"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
 			t.Fatalf("unexpected error from EvalExpression")
@@ -1571,7 +1571,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name contains li", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "%li%"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1597,7 +1597,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name ends with d", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "%d"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, (sqlStatment)))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1623,7 +1623,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name is exactly 5 letters", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "_____"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1649,7 +1649,7 @@ func TestLikeOperatorSQL(t *testing.T) {
 	t.Run("name starts with Ch", func(t *testing.T) {
 		rc := generateTestColumns()
 		sqlStatment := "Ch%"
-		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, string(sqlStatment)))
+		whereStatment := NewBinaryExpr(NewColumnResolve("name"), Like, NewLiteralResolve(arrow.BinaryTypes.String, sqlStatment))
 
 		boolMask, err := EvalExpression(whereStatment, rc)
 		if err != nil {
@@ -1672,4 +1672,197 @@ func TestLikeOperatorSQL(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNullCases(t *testing.T) {
+	t.Run("null Column literal", func(t *testing.T) {
+		v := NewLiteralResolve(arrow.Null, nil)
+		array, err := EvalExpression(v, &operators.RecordBatch{
+			RowCount: 10,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		t.Logf("\t%v\n", array)
+	})
+
+}
+func makeBatch(schema *arrow.Schema, cols []arrow.Array) *operators.RecordBatch {
+	return &operators.RecordBatch{
+		Schema:   schema,
+		Columns:  cols,
+		RowCount: uint64(cols[0].Len()),
+	}
+}
+
+func TestNullCheckExpr(t *testing.T) {
+
+	t.Run("int32_some_nulls_mask", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		// col = [10, null, 30, null, 50]
+		b := array.NewInt32Builder(mem)
+		b.AppendValues(
+			[]int32{10, 20, 30, 40, 50},
+			[]bool{true, false, true, false, true},
+		)
+		arr := b.NewArray()
+		b.Release()
+		defer arr.Release()
+
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: "col", Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+			},
+			nil,
+		)
+		batch := makeBatch(schema, []arrow.Array{arr})
+		t.Logf("%v\n", batch.PrettyPrint())
+		expr := NewColumnResolve("col")
+
+		maskArr, err := EvalNullCheckMask(expr, batch)
+		if err != nil {
+			t.Fatalf("EvalNullCheckMask failed: %v", err)
+		}
+		defer maskArr.Release()
+
+		boolMask := maskArr.(*array.Boolean)
+		if boolMask.Len() != 5 {
+			t.Fatalf("expected length 5 mask, got %d", boolMask.Len())
+		}
+
+		// expected mask: [true, false, true, false, true]
+		want := []bool{true, false, true, false, true}
+
+		for i := 0; i < 5; i++ {
+			if boolMask.Value(i) != want[i] {
+				t.Fatalf("mask[%d]: expected %v, got %v", i, want[i], boolMask.Value(i))
+			}
+		}
+	})
+
+	// ───────────────────────────────────────────────
+
+	t.Run("string_all_nulls_mask", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+
+		b := array.NewStringBuilder(mem)
+		b.AppendValues([]string{"A", "B", "C"}, []bool{false, false, false})
+		arr := b.NewArray()
+		b.Release()
+		defer arr.Release()
+
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: "name", Type: arrow.BinaryTypes.String, Nullable: true},
+			},
+			nil,
+		)
+
+		batch := makeBatch(schema, []arrow.Array{arr})
+
+		expr := NewColumnResolve("name")
+
+		maskArr, err := EvalNullCheckMask(expr, batch)
+		if err != nil {
+			t.Fatalf("EvalNullCheckMask failed: %v", err)
+		}
+		defer maskArr.Release()
+
+		boolMask := maskArr.(*array.Boolean)
+
+		// expected: [false, false, false]
+		for i := 0; i < boolMask.Len(); i++ {
+			if boolMask.Value(i) != false {
+				t.Fatalf("expected all false, got true at row %d", i)
+			}
+		}
+	})
+
+	// ───────────────────────────────────────────────
+
+	t.Run("no_nulls_all_true_mask", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+
+		b := array.NewFloat64Builder(mem)
+		b.AppendValues([]float64{1.1, 2.2, 3.3}, []bool{true, true, true})
+		arr := b.NewArray()
+		b.Release()
+		defer arr.Release()
+
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: "val", Type: arrow.PrimitiveTypes.Float64, Nullable: false},
+			},
+			nil,
+		)
+
+		batch := makeBatch(schema, []arrow.Array{arr})
+
+		expr := NewColumnResolve("val")
+
+		maskArr, err := EvalNullCheckMask(expr, batch)
+		if err != nil {
+			t.Fatalf("EvalNullCheckMask failed: %v", err)
+		}
+		defer maskArr.Release()
+
+		boolMask := maskArr.(*array.Boolean)
+
+		// expected mask = [true, true, true]
+		for i := 0; i < boolMask.Len(); i++ {
+			if !boolMask.Value(i) {
+				t.Fatalf("expected true at %d, got false", i)
+			}
+		}
+	})
+}
+
+func TestLiteralCast(t *testing.T) {
+
+	tests := []struct {
+		name     string
+		dtype    arrow.DataType
+		value    any
+		rowCount uint64
+	}{
+		// ---- INT CASTS ----
+		{"Int8 literal", arrow.PrimitiveTypes.Int8, 5, 3},
+		{"Int16 literal", arrow.PrimitiveTypes.Int16, 5, 3},
+		{"Int32 literal", arrow.PrimitiveTypes.Int32, 5, 3},
+		{"Int64 literal", arrow.PrimitiveTypes.Int64, 5, 3},
+		{"Uint8 literal", arrow.PrimitiveTypes.Uint8, 5, 3},
+		{"Uint16 literal", arrow.PrimitiveTypes.Uint16, 5, 3},
+		{"Uint32 literal", arrow.PrimitiveTypes.Uint32, 5, 3},
+		{"Uint64 literal", arrow.PrimitiveTypes.Uint64, 5, 3},
+
+		// ---- FLOAT CASTS ----
+		{"Float32 literal", arrow.PrimitiveTypes.Float32, 23.5, 4},
+		{"Float64 literal", arrow.PrimitiveTypes.Float64, 23.5, 4},
+
+		// ---- STRING ----
+		{"String literal", arrow.BinaryTypes.String, "hello", 2},
+
+		// ---- BOOL ----
+		{"Bool literal", arrow.FixedWidthTypes.Boolean, true, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lit := NewLiteralResolve(tt.dtype, tt.value)
+
+			batch := &operators.RecordBatch{
+				RowCount: tt.rowCount,
+			}
+
+			arr, err := EvalExpression(lit, batch)
+			if err != nil {
+				t.Fatalf("EvalExpression failed: %v", err)
+			}
+			defer arr.Release()
+
+			if !arrow.TypeEqual(arr.DataType(), tt.dtype) {
+				t.Fatalf("expected Arrow type %v but got %v", tt.dtype, arr.DataType())
+			}
+		})
+	}
 }

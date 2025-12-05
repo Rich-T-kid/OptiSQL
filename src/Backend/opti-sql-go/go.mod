@@ -1,6 +1,6 @@
 module opti-sql-go
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/apache/arrow/go/v15 v15.0.2
@@ -28,6 +28,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.13 // indirect
 	github.com/aws/smithy-go v1.23.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect

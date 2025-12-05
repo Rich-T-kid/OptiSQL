@@ -86,6 +86,7 @@ Initial development is done in **Go** (`opti-sql-go`), which serves as the prima
 - `/operators` - SQL operator implementations (filter, join, aggregation, project)
 - `/physical-optimizer` - Query plan parsing and optimization
 - `/substrait` - Substrait plan integration
+- `/operators/OPERATORS.md` - concise reference for operator constructors, behavior and examples
 
 ## Branching Model
 

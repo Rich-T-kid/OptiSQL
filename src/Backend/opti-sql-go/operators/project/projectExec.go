@@ -20,7 +20,7 @@ var (
 )
 
 type ProjectExec struct {
-	child        operators.Operator
+	input        operators.Operator
 	outputschema arrow.Schema
 	expr         []Expr.Expression
 	done         bool
@@ -41,6 +41,17 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 				Type:     tp,
 				Nullable: true,
 			}
+		case *Expr.ColumnResolve:
+			tp, err := Expr.ExprDataType(ex, input.Schema())
+			if err != nil {
+				return nil, fmt.Errorf("project exec: failed to get expression data type for expr %d: %w", i, err)
+			}
+			fields[i] = arrow.Field{
+				Name:     ex.Name,
+				Type:     tp,
+				Nullable: true,
+			}
+
 		default:
 			name := fmt.Sprintf("col_%d", i)
 			Type, err := Expr.ExprDataType(e, input.Schema())
@@ -60,7 +71,7 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 	outputschema := arrow.NewSchema(fields, nil)
 	// return new exec
 	return &ProjectExec{
-		child:        input,
+		input:        input,
 		outputschema: *outputschema,
 		expr:         exprs,
 	}, nil
@@ -73,7 +84,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 		return nil, io.EOF
 	}
 
-	childBatch, err := p.child.Next(n)
+	childBatch, err := p.input.Next(n)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +105,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 		outPutCols[i] = arr
 		arr.Retain()
 	}
-	for _, c := range childBatch.Columns {
-		c.Release()
-	}
+	operators.ReleaseArrays(childBatch.Columns)
 	return &operators.RecordBatch{
 		Schema:   &p.outputschema,
 		Columns:  outPutCols,
@@ -104,7 +113,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 	}, nil
 }
 func (p *ProjectExec) Close() error {
-	return p.child.Close()
+	return p.input.Close()
 }
 func (p *ProjectExec) Schema() *arrow.Schema {
 	return &p.outputschema
