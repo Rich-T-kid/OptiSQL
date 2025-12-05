@@ -2,6 +2,7 @@ package filter
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"testing"
@@ -24,7 +25,7 @@ func TestFilterInit_1(t *testing.T) {
 		predicate := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30),
 		)
 		_, err := NewFilterExec(proj, predicate)
 		if err != nil {
@@ -50,7 +51,7 @@ func TestFilterInit_1(t *testing.T) {
 		predicate := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("does_not_exist"),
 			Expr.Equal,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(1)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 1),
 		)
 		_, err := NewFilterExec(proj, predicate)
 		if err == nil {
@@ -75,7 +76,7 @@ func TestFilterExec_BasicPredicates(t *testing.T) {
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30),
 		)
 
 		f, _ := NewFilterExec(proj, pred)
@@ -136,7 +137,7 @@ func TestFilterExec_BasicPredicates(t *testing.T) {
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("salary"),
 			Expr.LessThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(60000)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(60000.0)),
 		)
 
 		f, _ := NewFilterExec(proj, pred)
@@ -199,7 +200,7 @@ func TestFilterExec_EdgeCases(t *testing.T) {
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(20)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 20),
 		)
 
 		f, _ := NewFilterExec(proj, pred)
@@ -216,7 +217,7 @@ func TestFilterExec_EdgeCases(t *testing.T) {
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(0)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 0),
 		)
 
 		f, _ := NewFilterExec(proj, pred)
@@ -235,18 +236,17 @@ func TestFilterExec_EdgeCases(t *testing.T) {
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
 			Expr.Equal,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(-1)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, -1),
 		)
 
 		f, _ := NewFilterExec(proj, pred)
 
-		rb, err := f.Next(20)
-		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+		_, err := f.Next(20)
+		if err == nil {
+			t.Fatalf("expected EOF error but got nil")
 		}
-
-		if rb.RowCount != 0 {
-			t.Fatalf("expected 0 rows, got %d", rb.RowCount)
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("expected EOF error but got %v", err)
 		}
 	})
 
@@ -269,7 +269,7 @@ func TestFilterExec_EdgeCases(t *testing.T) {
 func TestFilterExecVariantCase(t *testing.T) {
 	t.Run("filter done", func(t *testing.T) {
 		proj := basicProject()
-		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.GreaterThan, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)))
+		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.GreaterThan, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30))
 		f, _ := NewFilterExec(proj, predicate)
 		_, err := f.Next(1)
 		if err != nil {
@@ -284,7 +284,7 @@ func TestFilterExecVariantCase(t *testing.T) {
 	})
 	t.Run("filter schema ", func(t *testing.T) {
 		proj := basicProject()
-		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.GreaterThan, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)))
+		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.GreaterThan, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30))
 		f, _ := NewFilterExec(proj, predicate)
 		t.Logf("%s", f.Schema())
 		if !f.schema.Equal(proj.Schema()) {
@@ -294,7 +294,7 @@ func TestFilterExecVariantCase(t *testing.T) {
 	})
 	t.Run("filter close ", func(t *testing.T) {
 		proj := basicProject()
-		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.GreaterThan, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)))
+		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.GreaterThan, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30))
 		f, _ := NewFilterExec(proj, predicate)
 		if f.Close() != nil {
 			t.Fatalf("expected nil error on close")
@@ -302,7 +302,7 @@ func TestFilterExecVariantCase(t *testing.T) {
 	})
 	t.Run("filter unsupported binary operator ", func(t *testing.T) {
 		proj := basicProject()
-		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.Addition, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)))
+		predicate := Expr.NewBinaryExpr(Expr.NewColumnResolve("age"), Expr.Addition, Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30))
 		_, err := NewFilterExec(proj, predicate)
 		if err == nil {
 			t.Fatalf("expected error for unsupported binary operator")
@@ -318,4 +318,31 @@ func TestFilterExecVariantCase(t *testing.T) {
 
 	})
 
+}
+
+func TestFilterBuffer(t *testing.T) {
+	t.Run("test", func(t *testing.T) {
+
+		proj := basicProject()
+		predicate := Expr.NewBinaryExpr(
+			Expr.NewColumnResolve("age"),
+			Expr.GreaterThan,
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30),
+		)
+		f, err := NewFilterExec(proj, predicate)
+		if err != nil {
+			t.Fatalf("failed to create filter exec: %v", err)
+		}
+		rc, err := f.Next(5)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		fmt.Printf("First Batch:\t%v\n", rc.PrettyPrint())
+		rc, err = f.Next(5)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		fmt.Printf("second Batch:\t%v\n", rc.PrettyPrint())
+
+	})
 }

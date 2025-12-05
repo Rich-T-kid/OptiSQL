@@ -219,7 +219,52 @@ type LiteralResolve struct {
 }
 
 func NewLiteralResolve(Type arrow.DataType, Value any) *LiteralResolve {
-	return &LiteralResolve{Type: Type, Value: Value}
+	var castVal any
+
+	switch v := Value.(type) {
+
+	// ------------------------------------------------------
+	// INT → cast based on Arrow integer type
+	// ------------------------------------------------------
+	case int:
+		switch Type.ID() {
+		case arrow.INT8:
+			castVal = int8(v)
+		case arrow.INT16:
+			castVal = int16(v)
+		case arrow.INT32:
+			castVal = int32(v)
+		case arrow.INT64:
+			castVal = int64(v)
+		case arrow.UINT8:
+			castVal = uint8(v)
+		case arrow.UINT16:
+			castVal = uint16(v)
+		case arrow.UINT32:
+			castVal = uint32(v)
+		case arrow.UINT64:
+			castVal = uint64(v)
+		default:
+			// not an integer Arrow type → store original
+			castVal = v
+		}
+	case string:
+		castVal = string(v)
+	case bool:
+		castVal = bool(v)
+	case float64:
+		switch Type.ID() {
+		case arrow.FLOAT32:
+			castVal = float32(v)
+		case arrow.FLOAT64:
+			castVal = float64(v)
+		}
+	default:
+		fmt.Printf("%v did not match any case, of type %T\n", v, v)
+		castVal = Value
+	}
+	fmt.Printf("sotred as -> %v\t%v\n", Type, castVal)
+	return &LiteralResolve{Type: Type, Value: castVal}
 }
 func EvalLiteral(l *LiteralResolve, batch *operators.RecordBatch) (arrow.Array, error) {
 	n := int(batch.RowCount)
@@ -532,7 +577,6 @@ func unpackDatum(d compute.Datum) (arrow.Array, error) {
 	if !ok {
 		return nil, fmt.Errorf("datum %v is not of type array", d)
 	}
-	fmt.Printf("unpackDatum: array str: \t%v\n", array.String())
 	return array.MakeArray(), nil
 }
 

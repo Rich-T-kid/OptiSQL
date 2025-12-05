@@ -37,7 +37,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 		havingExpr := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve(sumCol),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(600000)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 600000.0),
 		)
 
 		having, err := NewHavingExec(gb, havingExpr)
@@ -81,7 +81,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 		havingExpr := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve(countCol),
 			Expr.GreaterThanOrEqual,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(10)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 10.0),
 		)
 
 		having, err := NewHavingExec(gb, havingExpr)
@@ -119,7 +119,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 		havingExpr := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve(sumCol),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(1_000_000_000)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 1_000_000_000.0),
 		)
 
 		having, _ := NewHavingExec(gb, havingExpr)
@@ -180,7 +180,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 		havingExpr := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve(countCol),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(0)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 0.0),
 		)
 
 		h, _ := NewHavingExec(gb, havingExpr)

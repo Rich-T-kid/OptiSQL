@@ -107,6 +107,8 @@ src/Backend/test_data/json
 # Allow a specific CSV dataset that we want tracked despite the general csv ignores
 !src/Backend/test_data/csv/
 !src/Backend/test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv
+!src/Backend/test_data/csv/intergration_test_data_1.csv
+!src/Backend/test_data/csv/intergration_test_data_2.csv
 # allow parquet file
 !src/Backend/test_data/parquet/
 !src/Backend/test_data/parquet/capitals_clean.parquet

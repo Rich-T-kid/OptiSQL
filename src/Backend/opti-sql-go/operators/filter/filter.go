@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
+	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
 var (
@@ -23,6 +24,9 @@ type FilterExec struct {
 	schema    *arrow.Schema
 	predicate Expr.Expression
 	done      bool
+	//
+	bufferedCols []arrow.Array // not yet returned
+	bufferedSize int64
 }
 
 func NewFilterExec(input operators.Operator, pred Expr.Expression) (*FilterExec, error) {
@@ -30,52 +34,84 @@ func NewFilterExec(input operators.Operator, pred Expr.Expression) (*FilterExec,
 		return nil, errors.New("predicates passed to FilterExec are invalid")
 	}
 	return &FilterExec{
-		input:     input,
-		predicate: pred,
-		schema:    input.Schema(),
+		input:        input,
+		predicate:    pred,
+		schema:       input.Schema(),
+		bufferedCols: make([]arrow.Array, input.Schema().NumFields()),
 	}, nil
 }
 func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
-	if n == 0 {
-		return nil, errors.New("must pass in wanted batch size > 0")
-	}
-	if f.done {
+	if f.done && f.bufferedSize == 0 {
 		return nil, io.EOF
 	}
-	childBatch, err := f.input.Next(n)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			f.done = true
-			return nil, io.EOF
+	mem := memory.NewGoAllocator()
+	for f.bufferedSize < int64(n) && !f.done {
+		childBatch, err := f.input.Next(n)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				f.done = true
+				break // might be some in the buffer still
+			}
+			return nil, err
 		}
-		return nil, err
-	}
-	booleanMask, err := Expr.EvalExpression(f.predicate, childBatch)
-	if err != nil {
-		return nil, err
-	}
-	boolArr, ok := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
-	if !ok {
-		return nil, errors.New("predicate did not evaluate to boolean array")
-	}
-	filteredCol := make([]arrow.Array, len(childBatch.Columns))
-	for i, col := range childBatch.Columns {
-		filteredCol[i], err = ApplyBooleanMask(col, boolArr)
+		booleanMask, err := Expr.EvalExpression(f.predicate, childBatch)
 		if err != nil {
 			return nil, err
 		}
-	}
-	booleanMask.Release()
-	// release old columns
-	operators.ReleaseArrays(childBatch.Columns)
-	size := uint64(filteredCol[0].Len())
+		boolArr, ok := booleanMask.(*array.Boolean) // impossible for this to not be a boolean array,assuming validPredicates works as it should
+		if !ok {
+			return nil, errors.New("predicate did not evaluate to boolean array")
+		}
+		filteredCol := make([]arrow.Array, len(childBatch.Columns))
+		for i, col := range childBatch.Columns {
+			filteredCol[i], err = ApplyBooleanMask(col, boolArr)
+			if err != nil {
+				return nil, err
+			}
+		}
+		booleanMask.Release()
+		// combine with buffered columns
+		for i, col := range f.bufferedCols {
+			if col == nil {
+				f.bufferedCols[i] = filteredCol[i]
+				continue
+			}
+			// otherwise concate old + new
+			combined, err := array.Concatenate([]arrow.Array{col, filteredCol[i]}, mem)
+			if err != nil {
+				return nil, err
+			}
 
-	return &operators.RecordBatch{
-		Schema:   childBatch.Schema,
-		Columns:  filteredCol,
+			// Release old buffer column
+			col.Release()
+
+			f.bufferedCols[i] = combined
+		}
+		if len(childBatch.Columns) > 0 {
+			size := int64(filteredCol[0].Len())
+			f.bufferedSize += int64(size)
+		}
+	}
+	if f.bufferedSize == 0 {
+		return nil, io.EOF
+	}
+	toEmit := min(int64(n), f.bufferedSize)
+	out, err := f.sliceFilterCols(toEmit, mem)
+	if err != nil {
+		return nil, err
+	}
+	// subtract emitted rows from buffer; guard against accidental negative values
+
+	size := uint64(out[0].Len())
+
+	rc := &operators.RecordBatch{
+		Schema:   f.schema,
+		Columns:  out,
 		RowCount: size,
-	}, nil
+	}
+	return rc, nil
 }
+
 func (f *FilterExec) Schema() *arrow.Schema {
 	return f.schema
 }
@@ -144,4 +180,64 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 	default:
 		return false
 	}
+}
+
+func (f *FilterExec) sliceFilterCols(n int64, mem memory.Allocator) ([]arrow.Array, error) {
+	out := make([]arrow.Array, len(f.bufferedCols))
+
+	// Build index arrays for:
+	// 1) rows to emit: 0 .. n-1
+	// 2) rows to keep: n .. f.bufferedSize-1
+	emitIdx := array.NewInt64Builder(mem)
+	keepIdx := array.NewInt64Builder(mem)
+
+	total := f.bufferedSize
+	limit := n
+	if limit > total {
+		limit = total
+	}
+
+	// emit rows [0 , limit)
+	for i := int64(0); i < limit; i++ {
+		emitIdx.Append(i)
+	}
+
+	// keep rows [limit , total)
+	for i := limit; i < total; i++ {
+		keepIdx.Append(i)
+	}
+
+	emitArr := emitIdx.NewArray()
+	keepArr := keepIdx.NewArray()
+	emitIdx.Release()
+	keepIdx.Release()
+	defer emitArr.Release()
+	defer keepArr.Release()
+
+	// For each column: materialize output slice + update buffer
+	for i, col := range f.bufferedCols {
+		// emit slice
+		sliceOut, err := compute.TakeArray(context.TODO(), col, emitArr)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = sliceOut
+
+		// keep remaining slice
+		keepSlice, err := compute.TakeArray(context.TODO(), col, keepArr)
+		if err != nil {
+			return nil, err
+		}
+
+		// release old buffer column
+		col.Release()
+
+		// store updated buffer
+		f.bufferedCols[i] = keepSlice
+	}
+
+	// update size
+	f.bufferedSize = total - limit
+
+	return out, nil
 }

@@ -19,6 +19,11 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 )
 
+/*
+indivdial unit test for each operator
+serves as documentation as to how to use each operator
+*/
+
 // test for all operators together
 // using in memory format at first
 func generateIntegrationDataset1(mem memory.Allocator) ([]string, []arrow.Array) {
@@ -272,7 +277,7 @@ func TestProjectExec(t *testing.T) {
 				Expr.NewBinaryExpr(
 					Expr.NewColumnResolve("salary"),
 					Expr.Multiplication,
-					Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(1.10)),
+					Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 1.10),
 				),
 				"adjusted_salary",
 			),
@@ -379,7 +384,7 @@ func TestFilterExec(t *testing.T) {
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(30)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 30),
 		)
 
 		filt, err := filter.NewFilterExec(src, pred)
@@ -422,7 +427,7 @@ func TestFilterExec(t *testing.T) {
 			Expr.NewBinaryExpr(
 				Expr.NewColumnResolve("salary"),
 				Expr.GreaterThan,
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(70000)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 70000.0),
 			),
 		)
 		// department = 'Engineering' AND salary > 70000
@@ -982,7 +987,7 @@ func TestHavingExec(t *testing.T) {
 		having := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("avg_Column(salary)"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(75000)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 75000.0),
 		)
 
 		hv, _ := aggr.NewHavingExec(gb, having)
@@ -1011,7 +1016,7 @@ func TestHavingExec(t *testing.T) {
 		having := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("avg_Column(salary)"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(999999)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 999999.0),
 		)
 
 		hv, _ := aggr.NewHavingExec(gb, having)
@@ -1029,7 +1034,7 @@ func TestHavingExec(t *testing.T) {
 		having := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("avg_Column(salary)"),
 			Expr.GreaterThan,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(0)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(0.0)),
 		)
 
 		hv, _ := aggr.NewHavingExec(gb, having)

@@ -3,7 +3,6 @@ package filter
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"math"
 	"opti-sql-go/Expr"
@@ -117,7 +116,6 @@ func (d *DistinctExec) Next(n uint16) (*operators.RecordBatch, error) {
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					d.consumedInput = true
-					fmt.Printf("distinctArray: \t%v\n", d.distinctValuesArray)
 					if d.distinctValuesArray[0] != nil { // nill check in case of no distict elements being found or even just input operator doesnt return anything
 						d.totalRows = uint64(d.distinctValuesArray[0].Len())
 					}

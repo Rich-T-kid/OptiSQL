@@ -420,7 +420,7 @@ func TestProjectExec_CastLiteral_Column(t *testing.T) {
 
 		exprs := []Expr.Expression{
 			Expr.NewCastExpr(
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int64, int64(4)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int64, 4),
 				arrow.PrimitiveTypes.Float64,
 			),
 		}
@@ -486,7 +486,7 @@ func TestProjectExec_Column_Literal(t *testing.T) {
 			Expr.NewBinaryExpr(
 				Expr.NewColumnResolve("age"),
 				Expr.Addition,
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int8, int8(10)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int8, 10),
 			),
 		)
 
@@ -511,7 +511,7 @@ func TestProjectExec_Column_Literal(t *testing.T) {
 			Expr.NewBinaryExpr(
 				Expr.NewColumnResolve("score"),
 				Expr.Subtraction,
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float32, float32(5.0)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float32, 5.0),
 			),
 		)
 
@@ -536,7 +536,7 @@ func TestProjectExec_Column_Literal(t *testing.T) {
 			Expr.NewBinaryExpr(
 				Expr.NewColumnResolve("id"),
 				Expr.Multiplication,
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int64, int64(2)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int64, 2),
 			),
 		)
 
@@ -558,7 +558,7 @@ func TestProjectExec_Column_Literal(t *testing.T) {
 			Expr.NewBinaryExpr(
 				Expr.NewColumnResolve("score"),
 				Expr.Division,
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float32, float32(2)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float32, 2.0),
 			),
 		)
 
@@ -607,7 +607,7 @@ func TestProjectExec_AliasExpr(t *testing.T) {
 				Expr.NewBinaryExpr(
 					Expr.NewColumnResolve("age"),
 					Expr.Addition,
-					Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int8, int8(10)),
+					Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int8, 10),
 				),
 				"boosted_age",
 			),
@@ -635,7 +635,7 @@ func TestProjectExec_AliasExpr(t *testing.T) {
 
 		exprs := Expr.NewExpressions(
 			Expr.NewAlias(
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(7)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 7),
 				"constant_value",
 			),
 		)
@@ -659,9 +659,9 @@ func TestProjectExec_AliasExpr(t *testing.T) {
 		memSrc, _ := NewInMemoryProjectExec(names, cols)
 
 		inner := Expr.NewBinaryExpr(
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(2)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 2),
 			Expr.Addition,
-			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, int32(3)),
+			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Int32, 3),
 		)
 
 		exprs := Expr.NewExpressions(
@@ -741,7 +741,7 @@ func TestProjectExec_FunctionExpr(t *testing.T) {
 	t.Run("LOWER('MonKey_x')", func(t *testing.T) {
 		memSrc, _ := NewInMemoryProjectExec(names, cols)
 
-		expr := Expr.NewLiteralResolve(arrow.BinaryTypes.String, string("MoNKey_X"))
+		expr := Expr.NewLiteralResolve(arrow.BinaryTypes.String, "MoNKey_X")
 
 		exprs := Expr.NewExpressions(
 			Expr.NewScalarFunction(
@@ -779,7 +779,7 @@ func TestProjectExec_FunctionExpr(t *testing.T) {
 			Expr.NewBinaryExpr(
 				Expr.NewColumnResolve("score"),
 				Expr.Subtraction,
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float32, float32(100)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float32, float32(100.0)),
 			),
 		)
 
@@ -811,7 +811,7 @@ func TestProjectExec_FunctionExpr(t *testing.T) {
 		expr := Expr.NewScalarFunction(
 			Expr.Round,
 			Expr.NewBinaryExpr(
-				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(2.5)),
+				Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 2.5),
 				Expr.Multiplication,
 				Expr.NewColumnResolve("score"),
 			),
