@@ -204,7 +204,6 @@ func parseDataType(sample string) arrow.DataType {
 	if sample == "" || strings.EqualFold(sample, "NULL") {
 		return arrow.BinaryTypes.String
 	}
-
 	// Boolean
 	if sample == "true" || sample == "false" {
 		return arrow.FixedWidthTypes.Boolean
