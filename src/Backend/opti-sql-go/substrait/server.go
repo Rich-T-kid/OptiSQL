@@ -27,8 +27,7 @@ func newSubstraitServer(l *net.Listener) *SubstraitServer {
 
 // ExecuteQuery implements the gRPC service method
 func (s *SubstraitServer) ExecuteQuery(ctx context.Context, req *QueryExecutionRequest) (*QueryExecutionResponse, error) {
-	fmt.Printf("Received query request: logical_plan:%v\n sql:%s\n id:%v\n source: %v\n", req.SubstraitLogical, req.SqlStatement, req.Id, req.Source)
-
+	fmt.Printf("Received query request: logical_plan:%v\n sql:%v\n id:%v\n", req.LogicalPlan, req.SqlStatement, req.Id)
 	// Placeholder response
 	return &QueryExecutionResponse{
 		S3ResultLink: "",
@@ -78,4 +77,5 @@ func unifiedShutdownHandler(s *SubstraitServer, grpcServer *grpc.Server, stopCha
 	grpcServer.GracefulStop()
 
 	fmt.Println("Server shutdown complete")
+	os.Exit(1)
 }

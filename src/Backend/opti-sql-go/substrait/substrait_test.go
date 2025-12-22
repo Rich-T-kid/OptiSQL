@@ -29,13 +29,9 @@ func TestDummyInput(t *testing.T) {
 		t.Errorf("Expected non-nil Substrait server")
 	}
 	dummyRequest := &QueryExecutionRequest{
-		SqlStatement:     "SELECT * FROM table",
-		SubstraitLogical: []byte("CgJTUxIMCgpTZWxlY3QgKiBGUk9NIHRhYmxl"),
-		Id:               "GenerateDTMoneyOHaasdavdasvasdvada",
-		Source: &SourceType{
-			S3Source: "s3://my-bucket/data/table.parquet",
-			Mime:     "application/vnd.apache.parquet",
-		},
+		SqlStatement: "SELECT * FROM table",
+		LogicalPlan:  "CgJTUxIMCgpTZWxlY3QgKiBGUk9NIHRhYmxl",
+		Id:           "GenerateDTMoneyOHaasdavdasvasdvada",
 	}
 	resp, err := ss.ExecuteQuery(context.Background(), dummyRequest)
 	if err != nil {
