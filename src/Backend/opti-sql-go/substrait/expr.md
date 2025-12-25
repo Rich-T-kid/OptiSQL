@@ -120,12 +120,12 @@ Applies a scalar function element-wise.
 {
   "expr_type": "ScalarFunction",
   "func": "Upper", # or any (Valid) scalar function
-  "args": [
+  "expr":
     {
       "expr_type": "ColumnResolve",
       "name": "name"
     }
-  ]
+
 }
 ```
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"opti-sql-go/Expr"
 	"os"
 	"strings"
 	"testing"
@@ -68,25 +69,6 @@ func TestSubstraitPlanExist(t *testing.T) {
 }
 
 func TestSubstraitEmitParse(t *testing.T) {
-	t.Run("b0_00_test", func(t *testing.T) {
-		/*fileName := "basic_00_test.json"
-		sourceFile := fmt.Sprintf("%v/%v", customIRPath, fileName)
-		f, err := os.Open(sourceFile)
-		if err != nil {
-			t.Fatalf("failed to open %s, error returned:\t%v", fileName, err)
-		}
-		e, err := consumePlan(f)
-		if err != nil {
-			t.Fatalf("error occured reading plan: %v", err)
-		}
-		t.Logf("recieved final emmiter :%v\n", e)*/
-		name := "temp.23.12.csv"
-		pieces := strings.Split(name, ".")
-		fmt.Printf("pieces:\t%v\n", pieces)
-		lastPiece := pieces[len(pieces)-1]
-		fmt.Printf("last pieces:\t%v\n", lastPiece)
-
-	})
 	t.Run("basic_01_source_filter parse", func(t *testing.T) {
 		fileName := "b1_01_source_filter.json"
 		sourceFile := fmt.Sprintf("%v/%v", customIRPath, fileName)
@@ -103,7 +85,7 @@ func TestSubstraitEmitParse(t *testing.T) {
 	})
 }
 
-func TestSubstraitUnit(t *testing.T) {
+func TestSubstraitSourceParse(t *testing.T) {
 	t.Run("source parse test", func(t *testing.T) {
 		tests := []struct {
 			name      string
@@ -161,6 +143,226 @@ func TestSubstraitUnit(t *testing.T) {
 				}
 			})
 		}
+	})
+}
+func TestExpressionsParse(t *testing.T) {
+	// (1) all required fields exist
+	// (2) fields contain valid set of values (important for scalar functions and binary expr)
+	correctExpr := func(e Expr.Expression, wantedExpr string) bool {
+		switch e.(type) {
+		case *Expr.Alias:
+			return wantedExpr == "Alias"
+		case *Expr.ColumnResolve:
+			return wantedExpr == "ColumnResolve"
+		case *Expr.LiteralResolve:
+			return wantedExpr == "LiteralResolve"
+		case *Expr.BinaryExpr:
+			return wantedExpr == "BinaryExpr"
+		case *Expr.ScalarFunction:
+			return wantedExpr == "ScalarFunction"
+		case *Expr.CastExpr:
+			return wantedExpr == "CastExpr"
+		case *Expr.NullCheckExpr:
+			return wantedExpr == "NullCheckExpr"
+		default:
+			return false
+		}
+	}
+	t.Run("Column Resolve Test", func(t *testing.T) {
+		test := []struct {
+			testName       string
+			jsonBody       jsonOBJ
+			expectedColumn string
+			wantedExpreStr string
+			expectedError  bool
+		}{
+			{
+				testName: "basic column resolve",
+				jsonBody: map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "a",
+				},
+				expectedColumn: "a",
+				wantedExpreStr: "ColumnResolve",
+				expectedError:  false,
+			},
+			{
+				testName: "column resolve with extra fields (ignored)",
+				jsonBody: map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "user_id",
+					"junk":      "should be ignored",
+					"num":       123,
+				},
+				expectedColumn: "user_id",
+				wantedExpreStr: "ColumnResolve",
+				expectedError:  false,
+			},
+			{
+				testName: "missing name field",
+				jsonBody: map[string]any{
+					"expr_type": "ColumnResolve",
+				},
+				expectedColumn: "",
+				wantedExpreStr: "ColumnResolve",
+				expectedError:  true,
+			},
+			{
+				testName: "name is wrong type (number)",
+				jsonBody: map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      123,
+				},
+				expectedColumn: "",
+				wantedExpreStr: "ColumnResolve",
+				expectedError:  true,
+			},
+			{
+				testName: "name is empty string",
+				jsonBody: map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "",
+				},
+				expectedColumn: "",
+				wantedExpreStr: "ColumnResolve",
+				expectedError:  true,
+			},
+			{
+				testName: "expr_type wrong / missing (should fail)",
+				jsonBody: map[string]any{
+					// "expr_type": "ColumnResolve",
+					"name": "a",
+				},
+				expectedColumn: "",
+				wantedExpreStr: "ColumnResolve",
+				expectedError:  true,
+			},
+		}
+		for _, tt := range test {
+			t.Run(tt.testName, func(t *testing.T) {
+				expr, err := parseExpression(tt.jsonBody)
+				if tt.expectedError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					// Expected to fail and it failed -> test passes for this case.
+					return
+				}
+				if err != nil {
+					t.Fatalf("%s failed with error %v\n", tt.testName, err)
+				}
+				if !correctExpr(expr, tt.wantedExpreStr) {
+					t.Errorf("%s recieved the incorrect expression, expected %v but recieved %v\n", tt.testName, tt.wantedExpreStr, expr)
+				}
+				cr, _ := expr.(*Expr.ColumnResolve)
+				if cr.Name != tt.expectedColumn {
+					t.Errorf("%s has incorrect column resolve name, expected %s but recieved %v\n", tt.testName, tt.expectedColumn, cr.Name)
+				}
+			})
+		}
+		// one for each type of accepted expression
+	})
+	// ! test every literal type
+	t.Run("Literal Resolve Test", func(t *testing.T) {
+		// one for each type of accepted expression
+	})
+	// ! test every binary operator, use table test to reduce lines taken up
+	t.Run("BinaryExpr Test", func(t *testing.T) {
+		// one for each type of accepted expression
+	})
+	// ! test every scalr function
+	t.Run("ScalarFunction  Test", func(t *testing.T) {
+		// one for each type of accepted expression
+	})
+	t.Run("Alias Test", func(t *testing.T) {
+		// one for each type of accepted expression
+	})
+	t.Run("CastExpr Test", func(t *testing.T) {
+		// one for each type of accepted expression
+	})
+	t.Run("NullCheckExpr Test", func(t *testing.T) {
+		// one for each type of accepted expression
+	})
+}
+func TestSubstraitProjectParse(t *testing.T) {
+	t.Run("basic project operations", func(t *testing.T) {
+		projectTestID := "project parse test special ID"
+		lpMetaData := NewPlanMetaData(projectTestID)
+		tests := []struct {
+			testName    string
+			logicalPlan jsonOBJ
+			expectError bool
+		}{
+			{testName: "project all coluns",
+				logicalPlan: map[string]any{},
+				expectError: false,
+			},
+			{testName: "project some columns",
+				logicalPlan: map[string]any{},
+				expectError: false,
+			},
+			{testName: "project zero columns (should fail)",
+				logicalPlan: map[string]any{},
+				expectError: true,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				proj, err := parseProject(tt.logicalPlan, lpMetaData)
+				if err != nil && !tt.expectError {
+					t.Errorf("unexpected error %v", err)
+				}
+				basicBatch, _ := proj.Next(5)
+				t.Logf("%v\n", basicBatch.PrettyPrint())
+			})
+		}
+
+	})
+	t.Run("parsing alias in project", func(t *testing.T) {
+		projectAliasID := "project test special ID"
+		lpMetaData := NewPlanMetaData(projectAliasID)
+		tests := []struct {
+			testName    string
+			logicalPlan jsonOBJ
+			expectError bool
+		}{
+			{
+				testName:    "provide alias for all columns",
+				logicalPlan: map[string]any{},
+				expectError: false,
+			},
+			{
+				testName:    "provide alias no columns",
+				logicalPlan: map[string]any{},
+				expectError: false,
+			},
+			{
+				testName:    "provide alias for some columns",
+				logicalPlan: map[string]any{},
+				expectError: false,
+			},
+			{
+				testName:    "project colummns and alias column count arent aligned",
+				logicalPlan: map[string]any{},
+				expectError: true,
+			},
+			{
+				testName:    "project colummns and alias column count arent aligned",
+				logicalPlan: map[string]any{},
+				expectError: true,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				proj, err := parseProject(tt.logicalPlan, lpMetaData)
+				if err != nil && !tt.expectError {
+					t.Errorf("unexpected error %v", err)
+				}
+				basicBatch, _ := proj.Next(5)
+				t.Logf("%v\n", basicBatch.PrettyPrint())
+			})
+		}
+
 	})
 }
 

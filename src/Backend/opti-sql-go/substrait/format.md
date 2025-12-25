@@ -7,8 +7,10 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 ## source operator
 
 ```bash
-"source-node":{"link-to-s3"}
+"source-node":
+{"file-name":"link-to-s3","local":boolean}
 # file ext must end in .csv or .parquet
+#local? donwload to local machine of keep streaming from s3 bucket
 ```
 
 ## Project operator
@@ -16,10 +18,10 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 **sql** : `select a , b , c`
 
 ```bash
-"Project": {"input":{operator},"columns":["a","b","c"], "alias":["alias_a","alias_b","alias_c"]
+"Project":
+{ "input": {operator},
+  "expressions": [{Expression},{Expression},{Expression}]}
 ```
-
-**alias count must match up with the column count. if a query contains no alias for column at position x , leave alias[x] = "" and the name with remain the same**
 
 ## Filter Operator
 
@@ -44,7 +46,7 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 ```bash
 "Distinct": {
   "input": {operator},
-  "columns": ["a", "b"]
+  "expressions": [{Expression},{Expression},{Expression}]
 }
 ```
 
@@ -74,8 +76,14 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 "Sort": {
   "input": {operator},
   "by": [
-    { "column": "a", "order": "DESC" },
-    { "column": "b", "order": "ASC" }
+    {
+    "Expr":{Expression},
+    "asc":boolean,
+    },
+    {
+    "Expr":{Expression}, # generally resolves to columns
+    "asc":boolean,
+    },
   ]
 }
 ```
@@ -92,7 +100,7 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 "Aggregate": {
   "input": {operator},
   "function": "Sum",
-  "column": "a",
+  "column": {Expression},
   "alias": "sum_a"
 }
 ```

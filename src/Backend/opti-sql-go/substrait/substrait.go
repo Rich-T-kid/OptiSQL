@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
 	"opti-sql-go/operators/aggr"
 	"opti-sql-go/operators/filter"
@@ -109,7 +110,7 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 			op = filterOP
 			return &Emiter{op}, nil
 		case "project":
-			projectOP, err := parseProject(body)
+			projectOP, err := parseProject(body, plan)
 			if err != nil {
 				return nil, ErrBuildTreeFailed("project", err.Error())
 			}
@@ -224,7 +225,7 @@ func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, err
 func parseFilter(filterOBJ jsonOBJ) (*filter.FilterExec, error) {
 	return nil, nil
 }
-func parseProject(sourceOBJ jsonOBJ) (*project.ProjectExec, error) {
+func parseProject(sourceOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
 	return nil, nil
 }
 func parseSort(sourceOBJ jsonOBJ) (*aggr.SortExec, error) {
@@ -249,7 +250,102 @@ func parseHaving(sourceOBJ jsonOBJ) (*aggr.HavingExec, error) {
 }
 
 // expressions need to be handled in a special way since they contain serveral keys
-func parseExpression(m jsonOBJ) {}
+func parseExpression(m jsonOBJ) (Expr.Expression, error) {
+	// grab tje expr_type and then parse based on that
+	err := containsFields([]string{"expr_type"}, m)
+	if err != nil {
+		fmt.Printf("(parseExpression) eror: %v\n", err)
+		return nil, fmt.Errorf("malformed expression body. Doesnt contain expr_type field")
+	}
+	switch m["expr_type"].(string) {
+	case "ColumnResolve":
+		neededFields := []string{"name"}
+		fieldTypes := []string{"string"}
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		if m["name"] == "" {
+			return nil, fmt.Errorf("column resolve name cannot be empty")
+		}
+		cr := Expr.NewColumnResolve(m["name"].(string))
+		return cr, nil
+	case "LiteralResolve":
+		neededFields := []string{"value", "lit_type"}
+		fieldTypes := []string{m["lit_type"].(string), "string"} // ! todo
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+	case "BinaryExpr":
+		neededFields := []string{"op", "left", "right"} // ! todo
+		fieldTypes := []string{}
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+	case "ScalarFunction":
+		neededFields := []string{"func", "expr"}
+		fieldTypes := []string{} // ! todo
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+	case "Alias":
+		neededFields := []string{"name", "expr"}
+		fieldTypes := []string{} // ! todo
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+	case "CastExpr":
+		neededFields := []string{"expr", "to_type"}
+		fieldTypes := []string{} // ! todo
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+	case "NullCheckExpr":
+		neededFields := []string{"expr", "in_null"}
+		fieldTypes := []string{} // ! todo
+		err := containsFields(neededFields, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+		err = correctFieldTypes(neededFields, fieldTypes, m)
+		if err != nil {
+			return nil, fmt.Errorf("malformed expression body: %v", err)
+		}
+	default:
+		return nil, fmt.Errorf("invalid expression: %v", m["expr_type"])
+	}
+	return nil, fmt.Errorf("unreachable code")
+
+}
 
 // check that all the fileds exist, if any are missing return and error indicating which fields are missing
 // ignore any extra fields that may be present for now
