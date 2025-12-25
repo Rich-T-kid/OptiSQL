@@ -12,6 +12,8 @@ import (
 	"opti-sql-go/operators/project"
 	"os"
 	"strings"
+
+	"github.com/apache/arrow/go/v17/arrow"
 )
 
 var (
@@ -276,15 +278,39 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		return cr, nil
 	case "LiteralResolve":
 		neededFields := []string{"value", "lit_type"}
-		fieldTypes := []string{m["lit_type"].(string), "string"} // ! todo
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
 		}
+		fieldTypes := []string{m["lit_type"].(string), "string"} // ! todo
 		err = correctFieldTypes(neededFields, fieldTypes, m)
 		if err != nil {
-			return nil, fmt.Errorf("malformed expression body: %v", err)
+			return nil, fmt.Errorf("malformed expression body (Types): %v", err)
 		}
+		var value any
+		var arrowType arrow.DataType
+		switch m["lit_type"].(string) {
+		case "int":
+			arrowType = arrow.PrimitiveTypes.Int32
+			v, _ := m["value"].(int)
+			value = int32(v)
+		case "string":
+			arrowType = arrow.BinaryTypes.String
+			v, _ := m["value"].(string)
+			value = string(v)
+		case "boolean":
+			arrowType = arrow.FixedWidthTypes.Boolean
+			v, _ := m["value"].(bool)
+			value = bool(v)
+		case "float64":
+			arrowType = arrow.PrimitiveTypes.Float64
+			v, _ := m["value"].(float64)
+			value = float64(v)
+		default:
+			return nil, fmt.Errorf("invalid Literal Type was passed to Literal Resolve")
+		}
+		lr := Expr.NewLiteralResolve(arrowType, value)
+		return lr, nil
 	case "BinaryExpr":
 		neededFields := []string{"op", "left", "right"} // ! todo
 		fieldTypes := []string{}
@@ -298,7 +324,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		}
 	case "ScalarFunction":
 		neededFields := []string{"func", "expr"}
-		fieldTypes := []string{} // ! todo
+		fieldTypes := []string{"string", "object"} // ! todo
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -307,6 +333,23 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
 		}
+		function := m["func"].(string)
+		fn := Expr.SupportedFunctions(-1)
+		switch function {
+		case "Upper", "Lower", "Abs", "Round":
+			fn = Expr.FnToScalarFunction(function)
+
+		}
+		if fn == Expr.SupportedFunctions(-1) {
+			return nil, fmt.Errorf("invalid scalr function provided %s", function)
+
+		}
+		expr, err := parseExpression(m["expr"].(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+		sf := Expr.NewScalarFunction(Expr.FnToScalarFunction(function), expr)
+		return sf, nil
 	case "Alias":
 		neededFields := []string{"name", "expr"}
 		fieldTypes := []string{} // ! todo
@@ -410,7 +453,10 @@ func matchesExpectedType(value any, expected string) bool {
 	case "boolean":
 		_, ok := value.(bool)
 		return ok
-	case "number":
+	case "int":
+		_, ok := value.(int)
+		return ok
+	case "float64":
 		_, ok := value.(float64)
 		return ok
 	case "object":

@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/apache/arrow/go/v17/arrow"
 )
 
 func TestInitServer(t *testing.T) {
@@ -264,6 +266,113 @@ func TestExpressionsParse(t *testing.T) {
 	})
 	// ! test every literal type
 	t.Run("Literal Resolve Test", func(t *testing.T) {
+		const exprName = "LiteralResolve"
+		test := []struct {
+			testName       string
+			jsonBody       jsonOBJ
+			expectedValue  any
+			expectedType   arrow.DataType
+			wantedExpreStr string
+			expectedError  bool
+		}{
+			{
+				testName: "basic Literal Resolve",
+				jsonBody: map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     10,
+					"lit_type":  "int",
+				},
+				expectedValue:  int32(10),
+				expectedType:   arrow.PrimitiveTypes.Int32,
+				wantedExpreStr: exprName,
+				expectedError:  false,
+			},
+			{
+				testName: "string literal",
+				jsonBody: map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     "hello",
+					"lit_type":  "string",
+				},
+				expectedValue:  "hello",
+				expectedType:   arrow.BinaryTypes.String,
+				wantedExpreStr: exprName,
+				expectedError:  false,
+			},
+			{
+				testName: "boolean literal true",
+				jsonBody: map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     true,
+					"lit_type":  "boolean",
+				},
+				expectedValue:  true,
+				expectedType:   arrow.FixedWidthTypes.Boolean,
+				wantedExpreStr: exprName,
+				expectedError:  false,
+			},
+			{
+				testName: "float64 literal",
+				jsonBody: map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     3.14159,
+					"lit_type":  "float64",
+				},
+				expectedValue:  3.14159,
+				expectedType:   arrow.PrimitiveTypes.Float64,
+				wantedExpreStr: exprName,
+				expectedError:  false,
+			},
+			{
+				testName: "missing required field (lit_type)",
+				jsonBody: map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     10,
+				},
+				expectedValue:  nil,
+				expectedType:   nil,
+				wantedExpreStr: exprName,
+				expectedError:  true,
+			},
+			{
+				testName: "invalid lit_type value",
+				jsonBody: map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     10,
+					"lit_type":  "int64", // not supported by your switch
+				},
+				expectedValue:  nil,
+				expectedType:   nil,
+				wantedExpreStr: exprName,
+				expectedError:  true,
+			},
+		}
+		for _, tt := range test {
+			t.Run(tt.testName, func(t *testing.T) {
+				expr, err := parseExpression(tt.jsonBody)
+				if tt.expectedError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("%s failed with unexpected error %v\n", tt.testName, err)
+				}
+				if !correctExpr(expr, "LiteralResolve") {
+					t.Errorf("%s recieved the incorrect expression, expected %v but recieved %v\n", tt.testName, tt.wantedExpreStr, expr)
+
+				}
+				lr, _ := expr.(*Expr.LiteralResolve)
+				if lr.Value != tt.expectedValue {
+					t.Fatalf("%s received incorrect value: expected (%T) %v, got (%T) %v",
+						tt.testName, tt.expectedValue, tt.expectedValue, lr.Value, lr.Value,
+					)
+				}
+			})
+		}
+
 		// one for each type of accepted expression
 	})
 	// ! test every binary operator, use table test to reduce lines taken up
@@ -271,9 +380,155 @@ func TestExpressionsParse(t *testing.T) {
 		// one for each type of accepted expression
 	})
 	// ! test every scalr function
-	t.Run("ScalarFunction  Test", func(t *testing.T) {
-		// one for each type of accepted expression
+	t.Run("Scalar Function Test", func(t *testing.T) {
+		const exprName = "ScalarFunction"
+
+		test := []struct {
+			testName      string
+			jsonBody      jsonOBJ
+			expectedFunc  string
+			expectedError bool
+		}{
+			// ---- VALID ----
+			{
+				testName: "Upper is valid",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      "Upper",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "Upper",
+				expectedError: false,
+			},
+			{
+				testName: "Lower is valid",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      "Lower",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "Lower",
+				expectedError: false,
+			},
+			{
+				testName: "Abs is valid",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      "Abs",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "Abs",
+				expectedError: false,
+			},
+			{
+				testName: "Round is valid",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      "Round",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "Round",
+				expectedError: false,
+			},
+
+			// ---- INVALID ----
+			{
+				testName: "invalid scalar function name",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      "NotARealFunc",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "",
+				expectedError: true,
+			},
+			{
+				testName: "missing func field",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "",
+				expectedError: true,
+			},
+			{
+				testName: "func wrong type",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      123,
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectedFunc:  "",
+				expectedError: true,
+			},
+			{
+				testName: "missing expr field",
+				jsonBody: map[string]any{
+					"expr_type": "ScalarFunction",
+					"func":      "Upper",
+				},
+				expectedFunc:  "",
+				expectedError: true,
+			},
+		}
+
+		for _, tt := range test {
+			t.Run(tt.testName, func(t *testing.T) {
+				expr, err := parseExpression(tt.jsonBody)
+
+				if tt.expectedError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					return
+				}
+
+				if err != nil {
+					t.Fatalf("%s failed with unexpected error %v", tt.testName, err)
+				}
+
+				if !correctExpr(expr, exprName) {
+					t.Fatalf("%s received incorrect expression, expected %s but received %T",
+						tt.testName, exprName, expr,
+					)
+				}
+
+				sf, ok := expr.(*Expr.ScalarFunction)
+				if !ok {
+					t.Fatalf("%s expected *Expr.ScalarFunction but received %T", tt.testName, expr)
+				}
+
+				// NOTE: if your struct field is named differently, change sf.Func below.
+				if sf.Function != Expr.FnToScalarFunction(tt.expectedFunc) {
+					t.Fatalf("%s received incorrect scalar function, expected %q but received %q",
+						tt.testName, tt.expectedFunc, sf.Function,
+					)
+				}
+			})
+		}
 	})
+
 	t.Run("Alias Test", func(t *testing.T) {
 		// one for each type of accepted expression
 	})
