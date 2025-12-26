@@ -313,7 +313,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		return lr, nil
 	case "BinaryExpr":
 		neededFields := []string{"op", "left", "right"} // ! todo
-		fieldTypes := []string{}
+		fieldTypes := []string{"string", "object", "object"}
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -322,6 +322,21 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
 		}
+		left, err := parseExpression(m["left"].(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+		right, err := parseExpression(m["right"].(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+		op := m["op"].(string)
+		operator, err := validBinaryOp(op)
+		if err != nil {
+			return nil, err
+		}
+		binaryExpression := Expr.NewBinaryExpr(left, operator, right)
+		return binaryExpression, nil
 	case "ScalarFunction":
 		neededFields := []string{"func", "expr"}
 		fieldTypes := []string{"string", "object"} // ! todo
@@ -352,7 +367,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		return sf, nil
 	case "Alias":
 		neededFields := []string{"name", "expr"}
-		fieldTypes := []string{} // ! todo
+		fieldTypes := []string{"string", "object"} // ! todo
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -361,9 +376,16 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
 		}
+		expr, err := parseExpression(m["expr"].(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+		name := m["name"].(string)
+		alias := Expr.NewAlias(expr, name)
+		return alias, nil
 	case "CastExpr":
 		neededFields := []string{"expr", "to_type"}
-		fieldTypes := []string{} // ! todo
+		fieldTypes := []string{"object", "string"} // ! todo
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -372,17 +394,25 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
 		}
-	case "NullCheckExpr":
-		neededFields := []string{"expr", "in_null"}
-		fieldTypes := []string{} // ! todo
-		err := containsFields(neededFields, m)
+		expr, err := parseExpression(m["expr"].(map[string]any))
 		if err != nil {
-			return nil, fmt.Errorf("malformed expression body: %v", err)
+			return nil, err
 		}
-		err = correctFieldTypes(neededFields, fieldTypes, m)
-		if err != nil {
-			return nil, fmt.Errorf("malformed expression body: %v", err)
+		var T arrow.DataType
+		switch m["to_type"].(string) {
+		case "int":
+			T = arrow.PrimitiveTypes.Int32
+		case "string":
+			T = arrow.BinaryTypes.String
+		case "boolean":
+			T = arrow.FixedWidthTypes.Boolean
+		case "float64":
+			T = arrow.PrimitiveTypes.Float64
+		default:
+			return nil, fmt.Errorf("invalid type provided.%v", m["to_type"])
 		}
+		cast := Expr.NewCastExpr(expr, T)
+		return cast, nil
 	default:
 		return nil, fmt.Errorf("invalid expression: %v", m["expr_type"])
 	}
@@ -467,5 +497,46 @@ func matchesExpectedType(value any, expected string) bool {
 		return ok
 	default:
 		return false
+	}
+}
+
+func validBinaryOp(s string) (Expr.BinaryOperator, error) {
+	switch s {
+	// arithmetic
+	case "Addition":
+		return Expr.BinaryOperator(Expr.Addition), nil
+	case "Subtraction":
+		return Expr.BinaryOperator(Expr.Subtraction), nil
+	case "Multiplication":
+		return Expr.BinaryOperator(Expr.Multiplication), nil
+	case "Division":
+		return Expr.BinaryOperator(Expr.Division), nil
+
+	// comparison
+	case "Equal":
+		return Expr.BinaryOperator(Expr.Equal), nil
+	case "NotEqual":
+		return Expr.BinaryOperator(Expr.NotEqual), nil
+	case "LessThan":
+		return Expr.BinaryOperator(Expr.LessThan), nil
+	case "LessThanOrEqual":
+		return Expr.BinaryOperator(Expr.LessThanOrEqual), nil
+	case "GreaterThan":
+		return Expr.BinaryOperator(Expr.GreaterThan), nil
+	case "GreaterThanOrEqual":
+		return Expr.BinaryOperator(Expr.GreaterThanOrEqual), nil
+
+	// logical
+	case "And":
+		return Expr.BinaryOperator(Expr.And), nil
+	case "Or":
+		return Expr.BinaryOperator(Expr.Or), nil
+
+	// regex
+	case "Like":
+		return Expr.BinaryOperator(Expr.Like), nil
+
+	default:
+		return Expr.BinaryOperator(-1), fmt.Errorf("invalid binary operator: %s", s)
 	}
 }

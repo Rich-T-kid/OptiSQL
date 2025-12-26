@@ -377,6 +377,110 @@ func TestExpressionsParse(t *testing.T) {
 	})
 	// ! test every binary operator, use table test to reduce lines taken up
 	t.Run("BinaryExpr Test", func(t *testing.T) {
+		const exprName = "ScalarFunction"
+
+		validVariants := []string{
+			"Addition",
+			"Subtraction",
+			"Multiplication",
+			"Division",
+			"Equal",
+			"NotEqual",
+			"LessThan",
+			"LessThanOrEqual",
+			"GreaterThan",
+			"GreaterThanOrEqual",
+			"And",
+			"Or",
+			"Like",
+		}
+
+		// Helper to keep JSON bodies consistent and small.
+		mkBinary := func(op string) jsonOBJ {
+			return map[string]any{
+				"expr_type": "BinaryExpr",
+				"op":        op,
+				"left": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "a",
+				},
+				"right": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "b",
+				},
+			}
+		}
+
+		test := []struct {
+			testName      string
+			jsonBody      jsonOBJ
+			operator      string
+			expectedError bool
+		}{}
+
+		// --- Generate one passing test per valid operator variant ---
+		for _, op := range validVariants {
+			test = append(test, struct {
+				testName      string
+				jsonBody      jsonOBJ
+				operator      string
+				expectedError bool
+			}{
+				testName:      "operator propagates: " + op,
+				jsonBody:      mkBinary(op),
+				operator:      op,
+				expectedError: false,
+			})
+		}
+		test = append(test, struct {
+			testName      string
+			jsonBody      jsonOBJ
+			operator      string
+			expectedError bool
+		}{
+			testName:      "Empty Operator",
+			jsonBody:      mkBinary(""),
+			operator:      "",
+			expectedError: true,
+		},
+		)
+		test = append(test, struct {
+			testName      string
+			jsonBody      jsonOBJ
+			operator      string
+			expectedError bool
+		}{
+			testName:      "non-existant Operator",
+			jsonBody:      mkBinary("matrixMultiply"),
+			operator:      "matrixMultiply",
+			expectedError: true,
+		},
+		)
+
+		t.Logf("all tests: \t%v\n", test)
+		for _, tt := range test {
+			t.Run(tt.testName, func(t *testing.T) {
+				expr, err := parseExpression(tt.jsonBody)
+				if tt.expectedError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("%s failed with unexpected error %v\n", tt.testName, err)
+				}
+				if !correctExpr(expr, "BinaryExpr") {
+					t.Errorf("%s recieved the incorrect expression, expected %v but recieved %v of type %T\n", tt.testName, exprName, expr, expr)
+
+				}
+				BinaryExpr, _ := expr.(*Expr.BinaryExpr)
+				if !Expr.MatchesBinaryOperator(tt.operator, int(BinaryExpr.Op)) {
+					t.Errorf("%s mismatch between expected operator (%s) and the recieved operator (%v)", tt.testName, tt.operator, BinaryExpr.Op)
+				}
+
+			})
+		}
 		// one for each type of accepted expression
 	})
 	// ! test every scalr function
@@ -525,18 +629,250 @@ func TestExpressionsParse(t *testing.T) {
 						tt.testName, tt.expectedFunc, sf.Function,
 					)
 				}
+
 			})
 		}
 	})
 
 	t.Run("Alias Test", func(t *testing.T) {
-		// one for each type of accepted expression
+		const exprName = "Alias"
+		tests := []struct {
+			testName    string
+			jsonBody    jsonOBJ
+			aliasName   string
+			expectError bool
+		}{
+			{testName: "basic alias",
+				jsonBody: map[string]any{
+					"expr_type": "Alias",
+					"name":      "new_name",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "first_column",
+					},
+				},
+				aliasName:   "new_name",
+				expectError: false,
+			},
+			{
+				testName: "alias with different name",
+				jsonBody: map[string]any{
+					"expr_type": "Alias",
+					"name":      "alias_1",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "col_a",
+					},
+				},
+				aliasName:   "alias_1",
+				expectError: false,
+			},
+			{
+				testName: "missing alias name field",
+				jsonBody: map[string]any{
+					"expr_type": "Alias",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "first_column",
+					},
+				},
+				aliasName:   "",
+				expectError: true,
+			},
+			{
+				testName: "alias name wrong type",
+				jsonBody: map[string]any{
+					"expr_type": "Alias",
+					"name":      123,
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "first_column",
+					},
+				},
+				aliasName:   "",
+				expectError: true,
+			},
+			{
+				testName: "missing expr field",
+				jsonBody: map[string]any{
+					"expr_type": "Alias",
+					"name":      "new_name",
+				},
+				aliasName:   "",
+				expectError: true,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				expr, err := parseExpression(tt.jsonBody)
+				if tt.expectError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("%s failed with unexpected error %v", tt.testName, err)
+				}
+				if !correctExpr(expr, exprName) {
+					t.Fatalf("%s received incorrect expression, expected %s but received %T",
+						tt.testName, exprName, expr,
+					)
+
+				}
+
+				alias, ok := expr.(*Expr.Alias)
+				if !ok {
+					t.Fatalf("%s expected *Expr.Alias but received %T", tt.testName, expr)
+				}
+				if alias.Name != tt.aliasName {
+					t.Fatalf("%s recieved incorrect alias name, expected %s but recieved %s\n", tt.testName, tt.aliasName, alias.Name)
+				}
+
+			})
+		}
+
 	})
 	t.Run("CastExpr Test", func(t *testing.T) {
-		// one for each type of accepted expression
-	})
-	t.Run("NullCheckExpr Test", func(t *testing.T) {
-		// one for each type of accepted expression
+		const exprName = "CastExpr"
+
+		tests := []struct {
+			testName       string
+			jsonBody       jsonOBJ
+			expectedToType string
+			expectedError  bool
+		}{
+			// ---- VALID to_type ----
+			{
+				testName: "cast to int is valid",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+					"to_type": "int",
+				},
+				expectedToType: "int",
+				expectedError:  false,
+			},
+			{
+				testName: "cast to string is valid",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+					"to_type": "string",
+				},
+				expectedToType: "string",
+				expectedError:  false,
+			},
+			{
+				testName: "cast to boolean is valid",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+					"to_type": "boolean",
+				},
+				expectedToType: "boolean",
+				expectedError:  false,
+			},
+			{
+				testName: "cast to float64 is valid",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+					"to_type": "float64",
+				},
+				expectedToType: "float64",
+				expectedError:  false,
+			},
+
+			// ---- INVALID to_type / malformed ----
+			{
+				testName: "invalid to_type value",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+					"to_type": "int64",
+				},
+				expectedToType: "",
+				expectedError:  true,
+			},
+			{
+				testName: "missing to_type field",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+				},
+				expectedToType: "",
+				expectedError:  true,
+			},
+			{
+				testName: "to_type wrong type",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"expr": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "a",
+					},
+					"to_type": 123,
+				},
+				expectedToType: "",
+				expectedError:  true,
+			},
+			{
+				testName: "missing expr field",
+				jsonBody: map[string]any{
+					"expr_type": "CastExpr",
+					"to_type":   "float64",
+				},
+				expectedToType: "",
+				expectedError:  true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				expr, err := parseExpression(tt.jsonBody)
+
+				if tt.expectedError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					return
+				}
+
+				if err != nil {
+					t.Fatalf("%s failed with unexpected error %v", tt.testName, err)
+				}
+
+				if !correctExpr(expr, exprName) {
+					t.Fatalf("%s received incorrect expression, expected %s but received %T",
+						tt.testName, exprName, expr,
+					)
+				}
+
+				_, ok := expr.(*Expr.CastExpr)
+				if !ok {
+					t.Fatalf("%s expected *Expr.CastExpr but received %T", tt.testName, expr)
+				}
+			})
+		}
 	})
 }
 func TestSubstraitProjectParse(t *testing.T) {

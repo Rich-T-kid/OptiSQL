@@ -162,28 +162,9 @@ Casts the result of an expression to a specific Arrow type.
     "expr_type": "ColumnResolve",
     "name": "a"
   },
-  "to_type": "Float64"
+  "to_type": "float64"
 }
 ```
-
----
-
-## `NullCheckExpr`
-
-Checks whether values are null or non-null.
-
-```bash
-{
-  "expr_type": "NullCheckExpr",
-  "expr": {
-    "expr_type": "ColumnResolve",
-    "name": "a"
-  },
-  "is_null": true
-}
-```
-
-- Produces a boolean mask
 
 ---
 
