@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
 	"opti-sql-go/operators/aggr"
@@ -147,6 +148,13 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 		}
 		op = limitOP
 		return &Emiter{op}, nil
+	case "Aggregate":
+		aggrOP, err := parseSingleAggr(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("single-aggr", err.Error())
+		}
+		op = aggrOP
+		return &Emiter{op}, nil
 	case "groupby":
 		groupByOP, err := parseGroupBy(body, plan)
 		if err != nil {
@@ -253,11 +261,7 @@ func parseFilter(filterOBJ jsonOBJ, plan *planMetaData) (*filter.FilterExec, err
 		return nil, err
 	}
 	fmt.Printf("input schema: \t%v\n", input.Schema())
-	filterExec, err := filter.NewFilterExec(input, expression)
-	if err != nil {
-		return nil, err
-	}
-	return filterExec, nil
+	return filter.NewFilterExec(input, expression)
 }
 func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
 	fields := []string{"input", "expressions"}
@@ -290,32 +294,84 @@ func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec,
 	if err != nil {
 		return nil, err
 	}
-	ProjectNode, err := project.NewProjectExec(sourceInput, expres)
-	if err != nil {
-		return nil, err
-	}
-
-	return ProjectNode, nil
+	return project.NewProjectExec(sourceInput, expres)
 }
 func parseSort(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
 	return nil, nil
 }
-func parseDistinct(sourceOBJ jsonOBJ, plan *planMetaData) (*filter.DistinctExec, error) {
-	return nil, nil
+func parseDistinct(distinctOBJ jsonOBJ, plan *planMetaData) (*filter.DistinctExec, error) {
+	fields := []string{"input", "expressions"}
+	err := containsFields(fields, distinctOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "array"}, distinctOBJ)
+	if err != nil {
+		return nil, err
+	}
+	var expres []Expr.Expression
+	exprsVal, ok := distinctOBJ["expressions"].([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expressions field has invalid type, expected []map[string]any")
+	}
+
+	for i := range exprsVal {
+		expr := exprsVal[i]
+		e, err := parseExpression(expr)
+		if err != nil {
+			return nil, err
+		}
+		expres = append(expres, e)
+	}
+	if len(expres) == 0 {
+		return nil, fmt.Errorf("distinct operator needs at least one expressions")
+	}
+	sourceInput, err := resolveInput(distinctOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+	return filter.NewDistinctExec(sourceInput, expres)
 }
 
-func parseLimit(sourceOBJ jsonOBJ, plan *planMetaData) (*filter.LimitExec, error) {
-	return nil, nil
+func parseLimit(limitOBJ jsonOBJ, plan *planMetaData) (*filter.LimitExec, error) {
+	fields := []string{"input", "limit"}
+	err := containsFields(fields, limitOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "int"}, limitOBJ)
+	if err != nil {
+		return nil, err
+	}
+	limit, ok := limitOBJ["limit"].(int)
+	if !ok {
+		return nil, fmt.Errorf("limit field is not the correct type")
+	}
+	// must be a valid uint16 value 1-2^16
+	if limit <= 0 || limit > math.MaxUint16 {
+		return nil, fmt.Errorf("limit field cannot be less than 1 or greater than %v, but %v was passed in", math.MaxUint16, limit)
+	}
+	sourceInput, err := resolveInput(limitOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+
+	return filter.NewLimitExec(sourceInput, uint16(limit))
 }
 
+func parseSingleAggr(aggrOBJ jsonOBJ, plan *planMetaData) (*aggr.AggrExec, error) {
+	return nil, nil
+}
 func parseGroupBy(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.GroupByExec, error) {
 	return nil, nil
 }
 func parseJoin(sourceOBJ jsonOBJ, plan *planMetaData) (*join.HashJoinExec, error) {
 	return nil, nil
 }
-func parseHaving(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.HavingExec, error) {
-	return nil, nil
+
+// carbon clone of
+func parseHaving(havingOBJ jsonOBJ, plan *planMetaData) (operators.Operator, error) {
+	return parseFilter(havingOBJ, plan)
 }
 
 // expressions need to be handled in a special way since they contain serveral keys
@@ -511,8 +567,11 @@ func resolveInput(m jsonOBJ, plan *planMetaData) (operators.Operator, error) {
 	case "filter":
 		return parseFilter(newOBJ, plan)
 	case "distinct":
+		return parseDistinct(newOBJ, plan)
 	case "limit":
+		return parseLimit(newOBJ, plan)
 	case "sort":
+		return parseSort(newOBJ, plan)
 	case "aggregate":
 	case "having":
 	case "join":
@@ -641,4 +700,20 @@ func validBinaryOp(s string) (Expr.BinaryOperator, error) {
 	default:
 		return Expr.BinaryOperator(-1), fmt.Errorf("invalid binary operator: %s", s)
 	}
+}
+
+// ! figure out which are valid here
+// ! the expression needs to evaluate to a boolean mask
+/*
+something like this should be caught at parse time not run time (if possible)
+"input": sourceInput,
+				"expression": map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     "Canada",
+					"lit_type":  "string",
+				},
+
+*/
+func validFilterExpr(e Expr.Expression) bool {
+	return false
 }

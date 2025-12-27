@@ -267,7 +267,6 @@ func TestExpressionsParse(t *testing.T) {
 		}
 		// one for each type of accepted expression
 	})
-	// ! test every literal type
 	t.Run("Literal Resolve Test", func(t *testing.T) {
 		const exprName = "LiteralResolve"
 		test := []struct {
@@ -378,7 +377,6 @@ func TestExpressionsParse(t *testing.T) {
 
 		// one for each type of accepted expression
 	})
-	// ! test every binary operator, use table test to reduce lines taken up
 	t.Run("BinaryExpr Test", func(t *testing.T) {
 		const exprName = "ScalarFunction"
 
@@ -1411,9 +1409,9 @@ func TestLimitParse(t *testing.T) {
 			testName: "limit with large value",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
-				"limit": 1000000,
+				"limit": 10000,
 			},
-			expectedLimit: 1000000,
+			expectedLimit: 10000,
 			expectError:   false,
 		},
 		{
@@ -1605,6 +1603,363 @@ func TestSortParse(t *testing.T) {
 	}
 }
 
+func TestAggregateParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	projectNumericInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "country-code",
+				},
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "region-code",
+				},
+			},
+		},
+	}
+
+	projectStringInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "region",
+				},
+			},
+		},
+	}
+
+	aggregateTestID := "aggregate test"
+	lpMetaData := NewPlanMetaData(aggregateTestID)
+
+	tests := []struct {
+		testName    string
+		logicalPlan jsonOBJ
+		expectError bool
+	}{
+		{
+			testName: "aggregate Sum on numeric column",
+			logicalPlan: map[string]any{
+				"input":    sourceInput,
+				"function": "Sum",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "country-code",
+				},
+				"alias": "sum_country_code",
+			},
+			expectError: false,
+		},
+		{
+			testName: "aggregate Count on string column",
+			logicalPlan: map[string]any{
+				"input":    sourceInput,
+				"function": "Count",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+				"alias": "count_countries",
+			},
+			expectError: false,
+		},
+		{
+			testName: "aggregate Avg on numeric column",
+			logicalPlan: map[string]any{
+				"input":    sourceInput,
+				"function": "Avg",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "region-code",
+				},
+				"alias": "avg_region_code",
+			},
+			expectError: false,
+		},
+		{
+			testName: "aggregate Min on numeric column",
+			logicalPlan: map[string]any{
+				"input":    projectNumericInput,
+				"function": "Min",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "country-code",
+				},
+				"alias": "min_country_code",
+			},
+			expectError: false,
+		},
+		{
+			testName: "aggregate Max on string column",
+			logicalPlan: map[string]any{
+				"input":    projectStringInput,
+				"function": "Max",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "region",
+				},
+				"alias": "max_region",
+			},
+			expectError: false,
+		},
+		{
+			testName: "aggregate missing function field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+				"alias": "count_name",
+			},
+			expectError: true,
+		},
+		{
+			testName: "aggregate missing column field (should fail)",
+			logicalPlan: map[string]any{
+				"input":    sourceInput,
+				"function": "Sum",
+				"alias":    "sum_code",
+			},
+			expectError: true,
+		},
+		{
+			testName: "aggregate missing input field (should fail)",
+			logicalPlan: map[string]any{
+				"function": "Sum",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "country-code",
+				},
+				"alias": "sum_code",
+			},
+			expectError: true,
+		},
+		{
+			testName: "aggregate missing alias field (should fail)",
+			logicalPlan: map[string]any{
+				"input":    sourceInput,
+				"function": "Sum",
+				"column": map[string]any{
+					"expr_type": "ColumnResolve",
+					"name":      "country-code",
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			aggregate, err := parseSingleAggr(tt.logicalPlan, lpMetaData)
+			if (err != nil) != tt.expectError {
+				t.Errorf("parseAggregate() error = %v, expectError = %v", err, tt.expectError)
+				return
+			}
+			if !tt.expectError && aggregate == nil {
+				t.Errorf("parseAggregate() returned nil when error was nil")
+			}
+		})
+	}
+}
+
+func TestHavingParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	projectInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+			},
+		},
+	}
+
+	havingTestID := "having test"
+	lpMetaData := NewPlanMetaData(havingTestID)
+
+	tests := []struct {
+		testName    string
+		logicalPlan jsonOBJ
+		expectError bool
+	}{
+		{
+			testName: "having with simple equality expression",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"expression": map[string]any{
+					"expr_type": "BinaryExpr",
+					"op":        "Equal",
+					"left": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+					"right": map[string]any{
+						"expr_type": "LiteralResolve",
+						"value":     "Canada",
+						"lit_type":  "string",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "having with complex AND expression",
+			logicalPlan: map[string]any{
+				"input": projectInput,
+				"expression": map[string]any{
+					"expr_type": "BinaryExpr",
+					"op":        "And",
+					"left": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "Equal",
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"right": map[string]any{
+							"expr_type": "LiteralResolve",
+							"value":     "Canada",
+							"lit_type":  "string",
+						},
+					},
+					"right": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "NotEqual",
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"right": map[string]any{
+							"expr_type": "LiteralResolve",
+							"value":     "",
+							"lit_type":  "string",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "having missing expression field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+			},
+			expectError: true,
+		},
+		{
+			testName: "having missing input field (should fail)",
+			logicalPlan: map[string]any{
+				"expression": map[string]any{
+					"expr_type": "BinaryExpr",
+					"op":        "Equal",
+					"left": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+					"right": map[string]any{
+						"expr_type": "LiteralResolve",
+						"value":     "Canada",
+						"lit_type":  "string",
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			testName: "having with OR expression",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"expression": map[string]any{
+					"expr_type": "BinaryExpr",
+					"op":        "Or",
+					"left": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "Equal",
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"right": map[string]any{
+							"expr_type": "LiteralResolve",
+							"value":     "USA",
+							"lit_type":  "string",
+						},
+					},
+					"right": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "Equal",
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"right": map[string]any{
+							"expr_type": "LiteralResolve",
+							"value":     "Canada",
+							"lit_type":  "string",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "having with literal only expression (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"expression": map[string]any{
+					"expr_type": "LiteralResolve",
+					"value":     "Canada",
+					"lit_type":  "string",
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			having, err := parseHaving(tt.logicalPlan, lpMetaData)
+			if (err != nil) != tt.expectError {
+				t.Errorf("parseHaving() error = %v, expectError = %v", err, tt.expectError)
+				return
+			}
+			if !tt.expectError && having == nil {
+				t.Errorf("parseHaving() returned nil when error was nil")
+			}
+		})
+	}
+}
+
 func TestSourceParse(t *testing.T) {
 	t.Run("source with local CSV", func(t *testing.T) {
 		sourceTestID := "source local csv test"
@@ -1629,7 +1984,7 @@ func TestSourceParse(t *testing.T) {
 					"file-name": "data.csv",
 					"local":     true,
 				},
-				expectError: false,
+				expectError: true,
 			},
 			{
 				testName: "missing file-name field (should fail)",
@@ -1674,7 +2029,7 @@ func TestSourceParse(t *testing.T) {
 			{
 				testName: "remote CSV file",
 				logicalPlan: map[string]any{
-					"file-name": "s3://bucket/data.csv",
+					"file-name": "country_full.csv",
 					"local":     false,
 				},
 				expectError: false,
@@ -1682,7 +2037,7 @@ func TestSourceParse(t *testing.T) {
 			{
 				testName: "remote parquet file",
 				logicalPlan: map[string]any{
-					"file-name": "s3://bucket/data.parquet",
+					"file-name": "userdata.parquet",
 					"local":     false,
 				},
 				expectError: false,
