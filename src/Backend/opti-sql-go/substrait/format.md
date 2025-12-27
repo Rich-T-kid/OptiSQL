@@ -135,6 +135,8 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 }
 ```
 
+#### max value for limit is 2^16-1 (max uint16)
+
 ---
 
 ## Sort Operator

@@ -87,7 +87,6 @@ func consumePlan(r io.Reader, p *planMetaData) (*Emiter, error) {
 	if !exist {
 		return nil, ErrMissingEmitOperator
 	}
-	//fmt.Printf("map:\t%v\n", inMemoryRepr)
 	tree, ok := inMemoryRepr["Emit"].(map[string]any)
 	if !ok {
 		return nil, ErrInvalidEmitChildren
@@ -113,7 +112,7 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 	var op operators.Operator
 	switch strings.ToLower(operatorNode) {
 	case "filter":
-		filterOP, err := parseFilter(body)
+		filterOP, err := parseFilter(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("filter", err.Error())
 		}
@@ -172,8 +171,6 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 	return nil, ErrBuildTreeFailed("unknown", "no valid operator found in logical plan")
 }
 func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, error) {
-	fmt.Printf("parse-source obj: \t%v\n", sourceOBJ)
-	//"need to parse out the actuall file name form the url"
 	fields := []string{"file-name", "local"}
 	err := containsFields(fields, sourceOBJ)
 	if err != nil {
@@ -232,21 +229,48 @@ func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, err
 	return nil, nil
 
 }
-func parseFilter(filterOBJ jsonOBJ) (*filter.FilterExec, error) {
-	return nil, nil
-}
-func parseProject(sourceOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
-	fields := []string{"input", "expressions"}
-	err := containsFields(fields, sourceOBJ)
+func parseFilter(filterOBJ jsonOBJ, plan *planMetaData) (*filter.FilterExec, error) {
+	fields := []string{"input", "expression"}
+	err := containsFields(fields, filterOBJ)
 	if err != nil {
 		return nil, err
 	}
-	err = correctFieldTypes(fields, []string{"object", "array"}, sourceOBJ)
+	err = correctFieldTypes(fields, []string{"object", "object"}, filterOBJ)
+	if err != nil {
+		return nil, err
+	}
+	exprsVal, ok := filterOBJ["expression"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expression field has invalid type, expected map[string]any")
+	}
+	expression, err := parseExpression(exprsVal)
+	if err != nil {
+		return nil, err
+	}
+
+	input, err := resolveInput(filterOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("input schema: \t%v\n", input.Schema())
+	filterExec, err := filter.NewFilterExec(input, expression)
+	if err != nil {
+		return nil, err
+	}
+	return filterExec, nil
+}
+func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
+	fields := []string{"input", "expressions"}
+	err := containsFields(fields, projectOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "array"}, projectOBJ)
 	if err != nil {
 		return nil, err
 	}
 	var expres []Expr.Expression
-	exprsVal, ok := sourceOBJ["expressions"].([]map[string]any)
+	exprsVal, ok := projectOBJ["expressions"].([]map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("expressions field has invalid type, expected []map[string]any")
 	}
@@ -262,7 +286,7 @@ func parseProject(sourceOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, 
 	if len(expres) == 0 {
 		return nil, fmt.Errorf("project operator needs at least one expressions")
 	}
-	sourceInput, err := resolveInput(sourceOBJ["input"].(map[string]any), plan)
+	sourceInput, err := resolveInput(projectOBJ["input"].(map[string]any), plan)
 	if err != nil {
 		return nil, err
 	}
@@ -334,9 +358,9 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		var arrowType arrow.DataType
 		switch m["lit_type"].(string) {
 		case "int":
-			arrowType = arrow.PrimitiveTypes.Int32
+			arrowType = arrow.PrimitiveTypes.Int64
 			v, _ := m["value"].(int)
-			value = int32(v)
+			value = int64(v)
 		case "string":
 			arrowType = arrow.BinaryTypes.String
 			v, _ := m["value"].(string)
@@ -444,7 +468,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		var T arrow.DataType
 		switch m["to_type"].(string) {
 		case "int":
-			T = arrow.PrimitiveTypes.Int32
+			T = arrow.PrimitiveTypes.Int64
 		case "string":
 			T = arrow.BinaryTypes.String
 		case "boolean":
@@ -476,7 +500,6 @@ func resolveInput(m jsonOBJ, plan *planMetaData) (operators.Operator, error) {
 	if err := correctFieldTypes([]string{OperatorStr, opName}, []string{"string", "object"}, m); err != nil {
 		return nil, err
 	}
-	fmt.Printf("%v\n", m)
 	newOBJ := m[opName].(map[string]any)
 	switch strings.ToLower(opName) {
 	// base case, we hit a leaf node (source node)
@@ -486,7 +509,7 @@ func resolveInput(m jsonOBJ, plan *planMetaData) (operators.Operator, error) {
 	case "project":
 		return parseProject(newOBJ, plan)
 	case "filter":
-
+		return parseFilter(newOBJ, plan)
 	case "distinct":
 	case "limit":
 	case "sort":

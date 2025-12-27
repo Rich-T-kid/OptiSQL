@@ -3,6 +3,7 @@ package substrait
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"opti-sql-go/Expr"
 	"os"
@@ -284,8 +285,8 @@ func TestExpressionsParse(t *testing.T) {
 					"value":     10,
 					"lit_type":  "int",
 				},
-				expectedValue:  int32(10),
-				expectedType:   arrow.PrimitiveTypes.Int32,
+				expectedValue:  int64(10),
+				expectedType:   arrow.PrimitiveTypes.Int64,
 				wantedExpreStr: exprName,
 				expectedError:  false,
 			},
@@ -1045,6 +1046,674 @@ func TestSubstraitProjectParse(t *testing.T) {
 					t.Fatalf("unexpected Next() error %v", err)
 				}
 				t.Logf("%v\n", basicBatch.PrettyPrint())
+			})
+		}
+	})
+}
+
+func TestFilterParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	projectInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "country-code",
+				},
+			},
+		},
+	}
+
+	t.Run("filter with source input", func(t *testing.T) {
+		filterTestID := "filter with source test"
+		lpMetaData := NewPlanMetaData(filterTestID)
+
+		tests := []struct {
+			testName    string
+			logicalPlan jsonOBJ
+			expectError bool
+		}{
+			{
+				testName: "basic filter with binary expression (column > literal)",
+				logicalPlan: map[string]any{
+					"input": sourceInput,
+					"expression": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "GreaterThan",
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "region",
+						},
+						"right": map[string]any{
+							"expr_type": "LiteralResolve",
+							"value":     "Africa",
+							"lit_type":  "string",
+						},
+					},
+				},
+				expectError: false,
+			},
+			{
+				testName: "filter with column resolve expression",
+				logicalPlan: map[string]any{
+					"input": sourceInput,
+					"expression": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectError: false,
+			},
+			{
+				testName: "filter missing expression field (should fail)",
+				logicalPlan: map[string]any{
+					"input": sourceInput,
+				},
+				expectError: true,
+			},
+			{
+				testName: "filter missing input field (should fail)",
+				logicalPlan: map[string]any{
+					"expression": map[string]any{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				filter, err := parseFilter(tt.logicalPlan, lpMetaData)
+				if (err != nil) != tt.expectError {
+					t.Errorf("parseFilter() error = %v, expectError = %v", err, tt.expectError)
+					return
+				}
+				if !tt.expectError && filter == nil {
+					t.Errorf("parseFilter() returned nil filter when error was nil")
+				}
+			})
+		}
+	})
+
+	t.Run("filter with project input", func(t *testing.T) {
+		filterTestID := "filter with project test"
+		lpMetaData := NewPlanMetaData(filterTestID)
+
+		tests := []struct {
+			testName    string
+			logicalPlan jsonOBJ
+			expectError bool
+		}{
+			{
+				testName: "filter projected columns with binary expression",
+				logicalPlan: map[string]any{
+					"input": projectInput,
+					"expression": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "GreaterThan",
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+						"right": map[string]any{
+							"expr_type": "LiteralResolve",
+							"value":     50,
+							"lit_type":  "int",
+						},
+					},
+				},
+				expectError: false,
+			},
+			{
+				testName: "filter with complex nested expression",
+				logicalPlan: map[string]any{
+					"input": projectInput,
+					"expression": map[string]any{
+						"expr_type": "BinaryExpr",
+						"op":        "And",
+						"left": map[string]any{
+							"expr_type": "BinaryExpr",
+							"op":        "Equal",
+							"left": map[string]any{
+								"expr_type": "ColumnResolve",
+								"name":      "name",
+							},
+							"right": map[string]any{
+								"expr_type": "LiteralResolve",
+								"value":     "Canada",
+								"lit_type":  "string",
+							},
+						},
+						"right": map[string]any{
+							"expr_type": "BinaryExpr",
+							"op":        "NotEqual",
+							"left": map[string]any{
+								"expr_type": "ColumnResolve",
+								"name":      "name",
+							},
+							"right": map[string]any{
+								"expr_type": "LiteralResolve",
+								"value":     "",
+								"lit_type":  "string",
+							},
+						},
+					},
+				},
+				expectError: false,
+			},
+			{
+				testName: "filter with invalid expression type (should fail)",
+				logicalPlan: map[string]any{
+					"input": projectInput,
+					"expression": map[string]any{
+						"expr_type": "UnknownType",
+						"value":     "invalid",
+					},
+				},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				filter, err := parseFilter(tt.logicalPlan, lpMetaData)
+				if (err != nil) != tt.expectError {
+					t.Errorf("parseFilter() error = %v, expectError = %v", err, tt.expectError)
+					return
+				}
+				if !tt.expectError && filter == nil {
+					t.Errorf("parseFilter() returned nil filter when error was nil")
+				}
+			})
+		}
+	})
+}
+
+func TestDistinctParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	projectInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "region",
+				},
+			},
+		},
+	}
+
+	distinctTestID := "distinct test"
+	lpMetaData := NewPlanMetaData(distinctTestID)
+
+	tests := []struct {
+		testName    string
+		logicalPlan jsonOBJ
+		expectError bool
+	}{
+		{
+			testName: "distinct with single column",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"expressions": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "distinct with multiple columns",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"expressions": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "distinct on project input",
+			logicalPlan: map[string]any{
+				"input": projectInput,
+				"expressions": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "distinct missing expressions field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+			},
+			expectError: true,
+		},
+		{
+			testName: "distinct with empty expressions (should fail)",
+			logicalPlan: map[string]any{
+				"input":       sourceInput,
+				"expressions": []map[string]any{},
+			},
+			expectError: true,
+		},
+		{
+			testName: "distinct missing input field (should fail)",
+			logicalPlan: map[string]any{
+				"expressions": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "name",
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			distinct, err := parseDistinct(tt.logicalPlan, lpMetaData)
+			if (err != nil) != tt.expectError {
+				t.Errorf("parseDistinct() error = %v, expectError = %v", err, tt.expectError)
+				return
+			}
+			if !tt.expectError && distinct == nil {
+				t.Errorf("parseDistinct() returned nil when error was nil")
+			}
+		})
+	}
+}
+
+func TestLimitParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	projectInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+			},
+		},
+	}
+
+	limitTestID := "limit test"
+	lpMetaData := NewPlanMetaData(limitTestID)
+
+	tests := []struct {
+		testName      string
+		logicalPlan   jsonOBJ
+		expectedLimit int64
+		expectError   bool
+	}{
+		{
+			testName: "limit with small value",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"limit": 10,
+			},
+			expectedLimit: 10,
+			expectError:   false,
+		},
+		{
+			testName: "limit with large value",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"limit": 1000000,
+			},
+			expectedLimit: 1000000,
+			expectError:   false,
+		},
+		{
+			testName: "limit with value thats too large",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"limit": math.MaxUint16 + 100,
+			},
+			expectedLimit: 1000000,
+			expectError:   true,
+		},
+		{
+			testName: "limit on projected input",
+			logicalPlan: map[string]any{
+				"input": projectInput,
+				"limit": 5,
+			},
+			expectedLimit: 5,
+			expectError:   false,
+		},
+		{
+			testName: "limit missing limit field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+			},
+			expectError: true,
+		},
+		{
+			testName: "limit missing input field (should fail)",
+			logicalPlan: map[string]any{
+				"limit": 10,
+			},
+			expectError: true,
+		},
+		{
+			testName: "limit with zero value (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"limit": 0,
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			limit, err := parseLimit(tt.logicalPlan, lpMetaData)
+			if (err != nil) != tt.expectError {
+				t.Errorf("parseLimit() error = %v, expectError = %v", err, tt.expectError)
+				return
+			}
+			if !tt.expectError {
+				if limit == nil {
+					t.Errorf("parseLimit() returned nil when error was nil")
+					return
+				}
+
+				// Verify limit value is set correctly
+				if int64(limit.Remaining) != tt.expectedLimit {
+					t.Errorf("parseLimit() limit value = %d, expected %d", limit.Remaining, tt.expectedLimit)
+				}
+			}
+		})
+	}
+}
+
+func TestSortParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	projectInput := map[string]any{
+		"Operator": "Project",
+		"Project": map[string]any{
+			"input": sourceInput,
+			"expressions": []map[string]any{
+				{
+					"expr_type": "ColumnResolve",
+					"name":      "name",
+				},
+			},
+		},
+	}
+
+	sortTestID := "sort test"
+	lpMetaData := NewPlanMetaData(sortTestID)
+
+	tests := []struct {
+		testName    string
+		logicalPlan jsonOBJ
+		expectError bool
+	}{
+		{
+			testName: "sort single column ascending",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"by": []map[string]any{
+					{
+						"Expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"asc": true,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "sort single column descending",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"by": []map[string]any{
+					{
+						"Expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"asc": false,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "sort multiple columns",
+			logicalPlan: map[string]any{
+				"input": projectInput,
+				"by": []map[string]any{
+					{
+						"Expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"asc": true,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "sort missing by field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+			},
+			expectError: true,
+		},
+		{
+			testName: "sort missing input field (should fail)",
+			logicalPlan: map[string]any{
+				"by": []map[string]any{
+					{
+						"Expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						"asc": true,
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			testName: "sort with empty by array (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"by":    []map[string]any{},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			sort, err := parseSort(tt.logicalPlan, lpMetaData)
+			if (err != nil) != tt.expectError {
+				t.Errorf("parseSort() error = %v, expectError = %v", err, tt.expectError)
+				return
+			}
+			if !tt.expectError && sort == nil {
+				t.Errorf("parseSort() returned nil when error was nil")
+			}
+		})
+	}
+}
+
+func TestSourceParse(t *testing.T) {
+	t.Run("source with local CSV", func(t *testing.T) {
+		sourceTestID := "source local csv test"
+		lpMetaData := NewPlanMetaData(sourceTestID)
+
+		tests := []struct {
+			testName    string
+			logicalPlan jsonOBJ
+			expectError bool
+		}{
+			{
+				testName: "local CSV file",
+				logicalPlan: map[string]any{
+					"file-name": "country_full.csv",
+					"local":     true,
+				},
+				expectError: false,
+			},
+			{
+				testName: "local CSV with various extension",
+				logicalPlan: map[string]any{
+					"file-name": "data.csv",
+					"local":     true,
+				},
+				expectError: false,
+			},
+			{
+				testName: "missing file-name field (should fail)",
+				logicalPlan: map[string]any{
+					"local": true,
+				},
+				expectError: true,
+			},
+			{
+				testName: "invalid file extension (should fail)",
+				logicalPlan: map[string]any{
+					"file-name": "data.txt",
+					"local":     true,
+				},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				source, err := parseSource(tt.logicalPlan, lpMetaData)
+				if (err != nil) != tt.expectError {
+					t.Errorf("parseSource() error = %v, expectError = %v", err, tt.expectError)
+					return
+				}
+				if !tt.expectError && source == nil {
+					t.Errorf("parseSource() returned nil when error was nil")
+				}
+			})
+		}
+	})
+
+	t.Run("source with remote files", func(t *testing.T) {
+		sourceTestID := "source remote test"
+		lpMetaData := NewPlanMetaData(sourceTestID)
+
+		tests := []struct {
+			testName    string
+			logicalPlan jsonOBJ
+			expectError bool
+		}{
+			{
+				testName: "remote CSV file",
+				logicalPlan: map[string]any{
+					"file-name": "s3://bucket/data.csv",
+					"local":     false,
+				},
+				expectError: false,
+			},
+			{
+				testName: "remote parquet file",
+				logicalPlan: map[string]any{
+					"file-name": "s3://bucket/data.parquet",
+					"local":     false,
+				},
+				expectError: false,
+			},
+			{
+				testName: "remote file with unsupported extension (should fail)",
+				logicalPlan: map[string]any{
+					"file-name": "s3://bucket/data.json",
+					"local":     false,
+				},
+				expectError: true,
+			},
+			{
+				testName: "missing local field (should fail)",
+				logicalPlan: map[string]any{
+					"file-name": "data.csv",
+				},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.testName, func(t *testing.T) {
+				source, err := parseSource(tt.logicalPlan, lpMetaData)
+				if (err != nil) != tt.expectError {
+					t.Errorf("parseSource() error = %v, expectError = %v", err, tt.expectError)
+					return
+				}
+				if !tt.expectError && source == nil {
+					t.Errorf("parseSource() returned nil when error was nil")
+				}
 			})
 		}
 	})
