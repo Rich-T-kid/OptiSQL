@@ -179,7 +179,6 @@ BinaryExpr
 ScalarFunction
 Alias
 CastExpr
-NullCheckExpr
 ```
 
 Each expression object **must** contain exactly one `expr_type`.

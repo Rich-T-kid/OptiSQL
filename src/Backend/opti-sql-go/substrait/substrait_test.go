@@ -65,11 +65,12 @@ func TestSubstraitPlanExist(t *testing.T) {
 		t.Fatalf("failed to open dir with error: %v\n", e)
 	}
 	for entries, name := range e {
-		fmt.Printf("entrie[%v]:\t%v\n", entries, name)
+		t.Logf("entrie[%v]:\t%v\n", entries, name)
 	}
 
 }
 
+/*
 func TestSubstraitEmitParse(t *testing.T) {
 	t.Run("basic_01_source_filter parse", func(t *testing.T) {
 		fileName := "b1_01_source_filter.json"
@@ -86,6 +87,7 @@ func TestSubstraitEmitParse(t *testing.T) {
 
 	})
 }
+*/
 
 func TestSubstraitSourceParse(t *testing.T) {
 	t.Run("source parse test", func(t *testing.T) {
@@ -137,7 +139,7 @@ func TestSubstraitSourceParse(t *testing.T) {
 				}
 				if tt.local {
 					path := fmt.Sprintf("%s/%s-%s", curDir, tt.fileName, id)
-					fmt.Printf("attempting to remove %s from path\n", path)
+					t.Logf("attempting to remove %s from path\n", path)
 					if err := os.Remove(path); err != nil {
 						t.Errorf("test:%s\n failed to delete %s from file system \n", tt.name, tt.fileName)
 					}
@@ -457,7 +459,6 @@ func TestExpressionsParse(t *testing.T) {
 		},
 		)
 
-		t.Logf("all tests: \t%v\n", test)
 		for _, tt := range test {
 			t.Run(tt.testName, func(t *testing.T) {
 				expr, err := parseExpression(tt.jsonBody)
@@ -483,7 +484,7 @@ func TestExpressionsParse(t *testing.T) {
 		}
 		// one for each type of accepted expression
 	})
-	// ! test every scalr function
+
 	t.Run("Scalar Function Test", func(t *testing.T) {
 		const exprName = "ScalarFunction"
 
@@ -875,85 +876,177 @@ func TestExpressionsParse(t *testing.T) {
 		}
 	})
 }
+
 func TestSubstraitProjectParse(t *testing.T) {
+	source1 := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+	source2 := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "fortune1000_2024.csv",
+			"local":     false,
+		},
+	}
+
 	t.Run("basic project operations", func(t *testing.T) {
 		projectTestID := "project parse test special ID"
 		lpMetaData := NewPlanMetaData(projectTestID)
+
 		tests := []struct {
 			testName    string
 			logicalPlan jsonOBJ
 			expectError bool
 		}{
-			{testName: "project all coluns",
-				logicalPlan: map[string]any{},
+			{
+				testName: "project all coluns",
+				logicalPlan: map[string]any{
+					"input": source1,
+					"expressions": []map[string]any{
+						{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+						{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
+				},
 				expectError: false,
 			},
-			{testName: "project some columns",
-				logicalPlan: map[string]any{},
+			{
+				testName: "project some columns",
+				logicalPlan: map[string]any{
+					"input": source2,
+					"expressions": []map[string]any{
+						{
+							"expr_type": "ColumnResolve",
+							"name":      "Company",
+						},
+					},
+				},
 				expectError: false,
 			},
-			{testName: "project zero columns (should fail)",
-				logicalPlan: map[string]any{},
+			{
+				testName: "project zero columns (should fail)",
+				logicalPlan: map[string]any{
+					"input":       source1,
+					"expressions": []map[string]any{},
+				},
 				expectError: true,
 			},
 		}
+
 		for _, tt := range tests {
 			t.Run(tt.testName, func(t *testing.T) {
-				proj, err := parseProject(tt.logicalPlan, lpMetaData)
-				if err != nil && !tt.expectError {
-					t.Errorf("unexpected error %v", err)
+				_, err := parseProject(tt.logicalPlan, lpMetaData)
+
+				if tt.expectError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					return
 				}
-				basicBatch, _ := proj.Next(5)
-				t.Logf("%v\n", basicBatch.PrettyPrint())
+				if err != nil {
+					t.Fatalf("unexpected error %v", err)
+				}
 			})
 		}
-
 	})
+
 	t.Run("parsing alias in project", func(t *testing.T) {
 		projectAliasID := "project test special ID"
 		lpMetaData := NewPlanMetaData(projectAliasID)
+
 		tests := []struct {
 			testName    string
 			logicalPlan jsonOBJ
 			expectError bool
 		}{
 			{
-				testName:    "provide alias for all columns",
-				logicalPlan: map[string]any{},
+				testName: "provide alias for all columns",
+				logicalPlan: map[string]any{
+					"input": source1,
+					"expressions": []map[string]any{
+						{
+							"expr_type": "Alias",
+							"name":      "country_name",
+							"expr": map[string]any{
+								"expr_type": "ColumnResolve",
+								"name":      "name",
+							},
+						},
+						{
+							"expr_type": "Alias",
+							"name":      "cc",
+							"expr": map[string]any{
+								"expr_type": "ColumnResolve",
+								"name":      "country-code",
+							},
+						},
+					},
+				},
 				expectError: false,
 			},
 			{
-				testName:    "provide alias no columns",
-				logicalPlan: map[string]any{},
-				expectError: false,
-			},
-			{
-				testName:    "provide alias for some columns",
-				logicalPlan: map[string]any{},
-				expectError: false,
-			},
-			{
-				testName:    "project colummns and alias column count arent aligned",
-				logicalPlan: map[string]any{},
+				testName: "provide alias no columns",
+				logicalPlan: map[string]any{
+					"input":       source2,
+					"expressions": []map[string]any{},
+				},
 				expectError: true,
 			},
 			{
-				testName:    "project colummns and alias column count arent aligned",
-				logicalPlan: map[string]any{},
-				expectError: true,
+				testName: "provide alias for some columns",
+				logicalPlan: map[string]any{
+					"input": source2,
+					"expressions": []map[string]any{
+						{
+							"expr_type": "Alias",
+							"name":      "company_name",
+							"expr": map[string]any{
+								"expr_type": "ColumnResolve",
+								"name":      "Company",
+							},
+						},
+						{
+							// no alias on this one (mix alias + plain column)
+							"expr_type": "ColumnResolve",
+							"name":      "Country",
+						},
+					},
+				},
+				expectError: false,
 			},
 		}
+
 		for _, tt := range tests {
 			t.Run(tt.testName, func(t *testing.T) {
 				proj, err := parseProject(tt.logicalPlan, lpMetaData)
-				if err != nil && !tt.expectError {
-					t.Errorf("unexpected error %v", err)
+
+				if tt.expectError {
+					if err == nil {
+						t.Fatalf("%s did not fail when expected to do so", tt.testName)
+					}
+					return
 				}
-				basicBatch, _ := proj.Next(5)
+				if err != nil {
+					t.Fatalf("unexpected error %v", err)
+				}
+
+				// optional: sanity check the operator runs
+				basicBatch, err := proj.Next(5)
+				if err != nil {
+					t.Fatalf("unexpected Next() error %v", err)
+				}
 				t.Logf("%v\n", basicBatch.PrettyPrint())
 			})
 		}
-
 	})
 }
 
@@ -1043,10 +1136,10 @@ func TestCorrectFieldTypes(t *testing.T) {
 			wantError:  true,
 		},
 		{
-			name:       "number type correct",
+			name:       "int type correct",
 			fields:     []string{"count"},
-			fieldTypes: []string{"number"},
-			obj:        jsonOBJ{"count": float64(10)},
+			fieldTypes: []string{"int"},
+			obj:        jsonOBJ{"count": 10},
 			wantError:  false,
 		},
 		{

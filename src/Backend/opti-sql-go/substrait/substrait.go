@@ -11,6 +11,7 @@ import (
 	"opti-sql-go/operators/join"
 	"opti-sql-go/operators/project"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -98,73 +99,80 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 	//key=Operator , value=arguments to that operator
 
 	// the tree needs to be built from the bottom up. Recurse all the way down until you reach a leaf node || key == "Source"
+	const operator = "Operator"
 
-	for k, v := range m {
-		// dont print before only after
-		body := v.(map[string]any)
-		var op operators.Operator
-		switch strings.ToLower(k) {
-		case "filter":
-			filterOP, err := parseFilter(body)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("filter", err.Error())
-			}
-			op = filterOP
-			return &Emiter{op}, nil
-		case "project":
-			projectOP, err := parseProject(body, plan)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("project", err.Error())
-			}
-			op = projectOP
-			return &Emiter{op}, nil
-		case "sort":
-			sortOP, err := parseSort(body)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("sort", err.Error())
-			}
-			op = sortOP
-			return &Emiter{op}, nil
+	if err := containsFields([]string{operator}, m); err != nil {
+		return nil, err
+	}
+	if err := correctFieldTypes([]string{operator}, []string{"string"}, m); err != nil {
+		return nil, err
+	}
 
-		case "distinct":
-			distinctOP, err := parseDistinct(body)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("distinct", err.Error())
-			}
-			op = distinctOP
-			return &Emiter{op}, nil
-		case "limit":
-			limitOP, err := parseLimit(body)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("limit", err.Error())
-			}
-			op = limitOP
-			return &Emiter{op}, nil
-		case "groupby":
-			groupByOP, err := parseGroupBy(body)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("group-by", err.Error())
-			}
-			op = groupByOP
-			return &Emiter{op}, err
-
-		case "join":
-			joinOP, err := parseJoin(body)
-			if err != nil {
-				return nil, ErrBuildTreeFailed("join", err.Error())
-			}
-			op = joinOP
-			return &Emiter{op}, err
-
-		case "source", "expression": // invalid branch
-			//(1) Source:cannot directy return from source
-			//(2) expressions: cannot directy return expressions, need to call project on top
-			return nil, ErrInvalidOperator(k)
+	operatorNode := m[operator].(string)
+	body := m[operatorNode].(map[string]any)
+	var op operators.Operator
+	switch strings.ToLower(operatorNode) {
+	case "filter":
+		filterOP, err := parseFilter(body)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("filter", err.Error())
 		}
+		op = filterOP
+		return &Emiter{op}, nil
+	case "project":
+		projectOP, err := parseProject(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("project", err.Error())
+		}
+		op = projectOP
+		return &Emiter{op}, nil
+	case "sort":
+		sortOP, err := parseSort(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("sort", err.Error())
+		}
+		op = sortOP
+		return &Emiter{op}, nil
+
+	case "distinct":
+		distinctOP, err := parseDistinct(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("distinct", err.Error())
+		}
+		op = distinctOP
+		return &Emiter{op}, nil
+	case "limit":
+		limitOP, err := parseLimit(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("limit", err.Error())
+		}
+		op = limitOP
+		return &Emiter{op}, nil
+	case "groupby":
+		groupByOP, err := parseGroupBy(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("group-by", err.Error())
+		}
+		op = groupByOP
+		return &Emiter{op}, err
+
+	case "join":
+		joinOP, err := parseJoin(body, plan)
+		if err != nil {
+			return nil, ErrBuildTreeFailed("join", err.Error())
+		}
+		op = joinOP
+		return &Emiter{op}, err
+
+	case "source", "expression": // invalid branch
+		//(1) Source:cannot directy return from source
+		//(2) expressions: cannot directy return expressions, need to call project on top
+		return nil, ErrInvalidOperator(operatorNode)
 	}
 	return nil, ErrBuildTreeFailed("unknown", "no valid operator found in logical plan")
 }
 func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, error) {
+	fmt.Printf("parse-source obj: \t%v\n", sourceOBJ)
 	//"need to parse out the actuall file name form the url"
 	fields := []string{"file-name", "local"}
 	err := containsFields(fields, sourceOBJ)
@@ -228,26 +236,61 @@ func parseFilter(filterOBJ jsonOBJ) (*filter.FilterExec, error) {
 	return nil, nil
 }
 func parseProject(sourceOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
+	fields := []string{"input", "expressions"}
+	err := containsFields(fields, sourceOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "array"}, sourceOBJ)
+	if err != nil {
+		return nil, err
+	}
+	var expres []Expr.Expression
+	exprsVal, ok := sourceOBJ["expressions"].([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expressions field has invalid type, expected []map[string]any")
+	}
+
+	for i := range exprsVal {
+		expr := exprsVal[i]
+		e, err := parseExpression(expr)
+		if err != nil {
+			return nil, err
+		}
+		expres = append(expres, e)
+	}
+	if len(expres) == 0 {
+		return nil, fmt.Errorf("project operator needs at least one expressions")
+	}
+	sourceInput, err := resolveInput(sourceOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+	ProjectNode, err := project.NewProjectExec(sourceInput, expres)
+	if err != nil {
+		return nil, err
+	}
+
+	return ProjectNode, nil
+}
+func parseSort(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
 	return nil, nil
 }
-func parseSort(sourceOBJ jsonOBJ) (*aggr.SortExec, error) {
-	return nil, nil
-}
-func parseDistinct(sourceOBJ jsonOBJ) (*filter.DistinctExec, error) {
+func parseDistinct(sourceOBJ jsonOBJ, plan *planMetaData) (*filter.DistinctExec, error) {
 	return nil, nil
 }
 
-func parseLimit(sourceOBJ jsonOBJ) (*filter.LimitExec, error) {
+func parseLimit(sourceOBJ jsonOBJ, plan *planMetaData) (*filter.LimitExec, error) {
 	return nil, nil
 }
 
-func parseGroupBy(sourceOBJ jsonOBJ) (*aggr.GroupByExec, error) {
+func parseGroupBy(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.GroupByExec, error) {
 	return nil, nil
 }
-func parseJoin(sourceOBJ jsonOBJ) (*join.HashJoinExec, error) {
+func parseJoin(sourceOBJ jsonOBJ, plan *planMetaData) (*join.HashJoinExec, error) {
 	return nil, nil
 }
-func parseHaving(sourceOBJ jsonOBJ) (*aggr.HavingExec, error) {
+func parseHaving(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.HavingExec, error) {
 	return nil, nil
 }
 
@@ -282,7 +325,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
 		}
-		fieldTypes := []string{m["lit_type"].(string), "string"} // ! todo
+		fieldTypes := []string{m["lit_type"].(string), "string"}
 		err = correctFieldTypes(neededFields, fieldTypes, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body (Types): %v", err)
@@ -312,7 +355,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		lr := Expr.NewLiteralResolve(arrowType, value)
 		return lr, nil
 	case "BinaryExpr":
-		neededFields := []string{"op", "left", "right"} // ! todo
+		neededFields := []string{"op", "left", "right"}
 		fieldTypes := []string{"string", "object", "object"}
 		err := containsFields(neededFields, m)
 		if err != nil {
@@ -339,7 +382,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		return binaryExpression, nil
 	case "ScalarFunction":
 		neededFields := []string{"func", "expr"}
-		fieldTypes := []string{"string", "object"} // ! todo
+		fieldTypes := []string{"string", "object"}
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -367,7 +410,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		return sf, nil
 	case "Alias":
 		neededFields := []string{"name", "expr"}
-		fieldTypes := []string{"string", "object"} // ! todo
+		fieldTypes := []string{"string", "object"}
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -385,7 +428,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		return alias, nil
 	case "CastExpr":
 		neededFields := []string{"expr", "to_type"}
-		fieldTypes := []string{"object", "string"} // ! todo
+		fieldTypes := []string{"object", "string"}
 		err := containsFields(neededFields, m)
 		if err != nil {
 			return nil, fmt.Errorf("malformed expression body: %v", err)
@@ -416,8 +459,44 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 	default:
 		return nil, fmt.Errorf("invalid expression: %v", m["expr_type"])
 	}
-	return nil, fmt.Errorf("unreachable code")
 
+}
+func resolveInput(m jsonOBJ, plan *planMetaData) (operators.Operator, error) {
+	const OperatorStr = "Operator"
+	fields := []string{OperatorStr}
+	if err := containsFields(fields, m); err != nil {
+		return nil, err
+	}
+	opName := m[OperatorStr].(string)
+	_, ok := m[opName]
+	if !ok {
+		return nil, fmt.Errorf("malformed json body.operator body does not contain %s's body", opName)
+	}
+
+	if err := correctFieldTypes([]string{OperatorStr, opName}, []string{"string", "object"}, m); err != nil {
+		return nil, err
+	}
+	fmt.Printf("%v\n", m)
+	newOBJ := m[opName].(map[string]any)
+	switch strings.ToLower(opName) {
+	// base case, we hit a leaf node (source node)
+	case "source": // return concrete base case here
+		print("source case \n")
+		return parseSource(newOBJ, plan)
+	case "project":
+		return parseProject(newOBJ, plan)
+	case "filter":
+
+	case "distinct":
+	case "limit":
+	case "sort":
+	case "aggregate":
+	case "having":
+	case "join":
+	case "groupby":
+	}
+
+	return nil, nil
 }
 
 // check that all the fileds exist, if any are missing return and error indicating which fields are missing
@@ -493,8 +572,8 @@ func matchesExpectedType(value any, expected string) bool {
 		_, ok := value.(map[string]any)
 		return ok
 	case "array":
-		_, ok := value.([]any)
-		return ok
+		// Use reflection to check if it's any kind of slice/array
+		return reflect.TypeOf(value).Kind() == reflect.Slice
 	default:
 		return false
 	}
