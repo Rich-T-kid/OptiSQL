@@ -14,6 +14,35 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 )
 
+func testCleanUp() {
+	time.Sleep(5 * time.Second)
+
+	// Get current directory
+	curDir, err := os.Getwd()
+	if err != nil {
+		fmt.Printf("Failed to get current directory: %v\n", err)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(curDir)
+	if err != nil {
+		fmt.Printf("Failed to read directory: %v\n", err)
+	}
+
+	// Delete all files containing .csv in their name
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.Contains(entry.Name(), ".csv") {
+			filePath := fmt.Sprintf("%s/%s", curDir, entry.Name())
+			err := os.Remove(filePath)
+			if err != nil {
+				fmt.Printf("error removing %s: %v\n", entry.Name(), err)
+			} else {
+				fmt.Printf("deleted: %s\n", entry.Name())
+			}
+		}
+	}
+}
+
 func TestInitServer(t *testing.T) {
 	// Simple passing test
 	l, err := net.Listen("tcp", "0.0.0.0:1212")
@@ -2921,30 +2950,5 @@ func TestCorrectFieldTypes(t *testing.T) {
 }
 
 func TestCleanU(t *testing.T) {
-	time.Sleep(5 * time.Second)
-
-	// Get current directory
-	curDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-
-	// Read directory contents
-	entries, err := os.ReadDir(curDir)
-	if err != nil {
-		t.Fatalf("Failed to read directory: %v", err)
-	}
-
-	// Delete all files containing .csv in their name
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.Contains(entry.Name(), ".csv") {
-			filePath := fmt.Sprintf("%s/%s", curDir, entry.Name())
-			err := os.Remove(filePath)
-			if err != nil {
-				fmt.Printf("error removing %s: %v\n", entry.Name(), err)
-			} else {
-				fmt.Printf("deleted: %s\n", entry.Name())
-			}
-		}
-	}
+	testCleanUp()
 }

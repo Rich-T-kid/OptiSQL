@@ -10,10 +10,9 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
 {
   "Operator": "Source",
   "Source": {
-    "source-node": {
       "file-name": "link-to-s3",
       "local": false
-    }
+
   }
 }
 # file ext must end in .csv or .parquet

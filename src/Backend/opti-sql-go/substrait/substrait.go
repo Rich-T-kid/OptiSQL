@@ -179,6 +179,7 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 	return nil, ErrBuildTreeFailed("unknown", "no valid operator found in logical plan")
 }
 func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, error) {
+	fmt.Printf("sourceOBJ:\t%v\n", sourceOBJ)
 	fields := []string{"file-name", "local"}
 	err := containsFields(fields, sourceOBJ)
 	if err != nil {
@@ -278,11 +279,12 @@ func parseFilter(filterOBJ jsonOBJ, plan *planMetaData) (*filter.FilterExec, err
 	if !validExpr(expression) {
 		return nil, fmt.Errorf("%s is not a valid filter/having expression, must evaluate to boolean mask", expression)
 	}
-
+	fmt.Printf("input:\t%v\n", filterOBJ["input"])
 	input, err := resolveInput(filterOBJ["input"].(map[string]any), plan)
 	if err != nil {
 		return nil, err
 	}
+	print(1)
 	return filter.NewFilterExec(input, expression)
 }
 func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
@@ -797,6 +799,7 @@ type misMatchTypes struct {
 	idx              uint8
 	fieldName        string
 	value            any // from "%v" formating
+	recievedType     string
 	expectedDataType string
 }
 
@@ -815,6 +818,7 @@ func correctFieldTypes(fields []string, fieldTypes []string, obj jsonOBJ) error 
 				idx:              uint8(i),
 				fieldName:        field,
 				value:            value,
+				recievedType:     fmt.Sprintf("%T", value),
 				expectedDataType: expected,
 			})
 		}
@@ -836,9 +840,14 @@ func matchesExpectedType(value any, expected string) bool {
 		_, ok := value.(bool)
 		return ok
 	case "int":
-		_, ok := value.(int)
-		return ok
+		switch value.(type) {
+		case float64, float32, int:
+			return true
+		default:
+			return false
+		}
 	case "float64":
+		fmt.Printf("hit float case second\n")
 		_, ok := value.(float64)
 		return ok
 	case "object":

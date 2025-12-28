@@ -1117,7 +1117,7 @@ func TestInferScalarFunctionType(t *testing.T) {
 				t.Fatalf("expected panic for unknown function, got none")
 			}
 		}()
-		_ = inferScalarFunctionType(supportedFunctions(9999), arrow.PrimitiveTypes.Int32)
+		_ = inferScalarFunctionType(SupportedFunctions(9999), arrow.PrimitiveTypes.Int32)
 	})
 }
 

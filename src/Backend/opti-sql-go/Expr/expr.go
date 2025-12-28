@@ -24,35 +24,35 @@ var (
 	}
 )
 
-type binaryOperator int
+type BinaryOperator int
 
 const (
 	// arithmetic
-	Addition       binaryOperator = 1
-	Subtraction    binaryOperator = 2
-	Multiplication binaryOperator = 3
-	Division       binaryOperator = 4
+	Addition       BinaryOperator = 1
+	Subtraction    BinaryOperator = 2
+	Multiplication BinaryOperator = 3
+	Division       BinaryOperator = 4
 	// comparison
-	Equal              binaryOperator = 6
-	NotEqual           binaryOperator = 7
-	LessThan           binaryOperator = 8
-	LessThanOrEqual    binaryOperator = 9
-	GreaterThan        binaryOperator = 10
-	GreaterThanOrEqual binaryOperator = 11
+	Equal              BinaryOperator = 6
+	NotEqual           BinaryOperator = 7
+	LessThan           BinaryOperator = 8
+	LessThanOrEqual    BinaryOperator = 9
+	GreaterThan        BinaryOperator = 10
+	GreaterThanOrEqual BinaryOperator = 11
 	// logical
-	And binaryOperator = 12
-	Or  binaryOperator = 13
+	And BinaryOperator = 12
+	Or  BinaryOperator = 13
 	// RegEx expressions
-	Like binaryOperator = 14 // where column_name like "patte%n_with_wi%dcard_"
+	Like BinaryOperator = 14 // where column_name like "patte%n_with_wi%dcard_"
 )
 
-type supportedFunctions int
+type SupportedFunctions int
 
 const (
-	Upper supportedFunctions = 1
-	Lower supportedFunctions = 2
-	Abs   supportedFunctions = 3
-	Round supportedFunctions = 4
+	Upper SupportedFunctions = 1
+	Lower SupportedFunctions = 2
+	Abs   SupportedFunctions = 3
+	Round SupportedFunctions = 4
 )
 
 type aggFunctions = int
@@ -213,8 +213,7 @@ func (c *ColumnResolve) String() string {
 // Evaluates to a column of length = batch-size, filled with this literal.
 // sql: select 1
 type LiteralResolve struct {
-	Type arrow.DataType
-	// dont forget to cast the value. so string("hello") not just "hello"
+	Type  arrow.DataType
 	Value any
 }
 
@@ -425,11 +424,11 @@ func (l *LiteralResolve) String() string {
 
 type BinaryExpr struct {
 	Left  Expression
-	Op    binaryOperator
+	Op    BinaryOperator
 	Right Expression
 }
 
-func NewBinaryExpr(left Expression, op binaryOperator, right Expression) *BinaryExpr {
+func NewBinaryExpr(left Expression, op BinaryOperator, right Expression) *BinaryExpr {
 	return &BinaryExpr{
 		Left:  left,
 		Op:    op,
@@ -578,11 +577,11 @@ func unpackDatum(d compute.Datum) (arrow.Array, error) {
 }
 
 type ScalarFunction struct {
-	Function  supportedFunctions
+	Function  SupportedFunctions
 	Arguments Expression // resolve to something you can process IE, literal/coloumn Resolve
 }
 
-func NewScalarFunction(function supportedFunctions, Argument Expression) *ScalarFunction {
+func NewScalarFunction(function SupportedFunctions, Argument Expression) *ScalarFunction {
 	return &ScalarFunction{
 		Function:  function,
 		Arguments: Argument,
@@ -736,7 +735,7 @@ func lowerImpl(arr arrow.Array) (arrow.Array, error) {
 		return b.NewArray(), nil
 	}
 }
-func inferScalarFunctionType(fn supportedFunctions, argType arrow.DataType) arrow.DataType {
+func inferScalarFunctionType(fn SupportedFunctions, argType arrow.DataType) arrow.DataType {
 	switch fn {
 
 	case Upper, Lower:
@@ -753,7 +752,7 @@ func inferScalarFunctionType(fn supportedFunctions, argType arrow.DataType) arro
 	}
 }
 
-func inferBinaryType(left arrow.DataType, op binaryOperator, right arrow.DataType) arrow.DataType {
+func inferBinaryType(left arrow.DataType, op BinaryOperator, right arrow.DataType) arrow.DataType {
 	switch op {
 
 	case Addition, Subtraction, Multiplication, Division:
@@ -815,4 +814,58 @@ func validRegEx(columnValue, regExExpr string) bool {
 	ok, _ := regexp.MatchString(regExExpr, columnValue)
 	return ok
 
+}
+func FnToScalarFunction(s string) SupportedFunctions {
+	switch s {
+	case "Upper":
+		return 1
+	case "Lower":
+		return 2
+	case "Abs":
+		return 3
+	case "Round":
+		return 4
+	}
+	return 1
+}
+
+// matchesBinaryOperator returns true if `name` matches the binaryOperator constant
+// represented by `opInt`, using ONLY the exact names in your const block.
+func MatchesBinaryOperator(name string, opInt int) bool {
+	want := BinaryOperator(opInt)
+
+	switch name {
+	case "Addition":
+		return want == Addition
+	case "Subtraction":
+		return want == Subtraction
+	case "Multiplication":
+		return want == Multiplication
+	case "Division":
+		return want == Division
+
+	case "Equal":
+		return want == Equal
+	case "NotEqual":
+		return want == NotEqual
+	case "LessThan":
+		return want == LessThan
+	case "LessThanOrEqual":
+		return want == LessThanOrEqual
+	case "GreaterThan":
+		return want == GreaterThan
+	case "GreaterThanOrEqual":
+		return want == GreaterThanOrEqual
+
+	case "And":
+		return want == And
+	case "Or":
+		return want == Or
+
+	case "Like":
+		return want == Like
+
+	default:
+		return false
+	}
 }

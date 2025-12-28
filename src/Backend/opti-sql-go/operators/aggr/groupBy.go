@@ -92,14 +92,18 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 				operators.ReleaseArrays(childBatch.Columns)
 				return nil, err
 			}
-			arr, err = castArrayToFloat64(arr)
-			if err != nil {
-				operators.ReleaseArrays(aggrArrays)
-				operators.ReleaseArrays(groupArrays)
-				operators.ReleaseArrays(childBatch.Columns)
-				return nil, err
+			if agg.AggrFunc != Count { // handle count case
+				arr, err = castArrayToFloat64(arr)
+				if err != nil {
+					operators.ReleaseArrays(aggrArrays)
+					operators.ReleaseArrays(groupArrays)
+					operators.ReleaseArrays(childBatch.Columns)
+					return nil, err
+				}
+				aggrArrays[i] = arr
+			} else {
+				aggrArrays[i] = arr
 			}
-			aggrArrays[i] = arr
 		}
 
 		// 3. process rows
@@ -129,8 +133,20 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 				if arr.IsNull(row) {
 					continue
 				}
-				val := arr.(*array.Float64).Value(row)
-				g.groups[key][i].Update(val)
+				// handle count
+				// if it can be cast to float64 do it otherwise its count
+				arr, ok := arr.(*array.Float64)
+				if ok {
+					val := arr.Value(row)
+					g.groups[key][i].Update(val)
+					continue
+
+				}
+				// otherwise we know its count
+				countOp, ok := g.groups[key][i].(*countAggrAccumulator)
+				if ok {
+					countOp.Update(1)
+				}
 			}
 		}
 		// 4. release temp arrays
@@ -175,7 +191,7 @@ func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression
 	// 2. Add aggregate columns
 	for _, agg := range aggrExprs {
 		dt, err := Expr.ExprDataType(agg.Child, childSchema)
-		if err != nil || !validAggrType(dt) {
+		if err != nil || !validAggrType(agg, dt) {
 			return nil, ErrInvalidAggrColumnType(dt)
 		}
 		// All aggregates produce float64

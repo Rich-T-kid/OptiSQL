@@ -11,6 +11,7 @@ const (
 	s3CSVFile     = "country_full.csv"
 	s3ParquetFile = "userdata.parquet"
 	s3TxtFile     = "example.txt"
+	tmp_scamble   = "random_test"
 )
 
 // test s3 as a source first then run test for other source files here
@@ -82,7 +83,7 @@ func TestS3Download(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create s3 object: %v", err)
 		}
-		newFile, err := nr.DownloadLocally()
+		newFile, err := nr.DownloadLocally(tmp_scamble)
 		if err != nil {
 			t.Fatalf("failed to download file locally %v", err)
 		}
@@ -115,7 +116,7 @@ func TestS3Download(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create s3 object: %v", err)
 		}
-		newFile, err := nr.DownloadLocally()
+		newFile, err := nr.DownloadLocally(tmp_scamble)
 		if err != nil {
 			t.Fatalf("failed to download file locally %v", err)
 		}
@@ -148,7 +149,7 @@ func TestS3Download(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create s3 object: %v", err)
 		}
-		newFile, err := nr.DownloadLocally()
+		newFile, err := nr.DownloadLocally(tmp_scamble)
 		if err != nil {
 			t.Fatalf("failed to download file locally %v", err)
 		}
@@ -217,7 +218,7 @@ func TestS3ForSource(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create s3 object: %v", err)
 		}
-		f, err := nr.DownloadLocally()
+		f, err := nr.DownloadLocally(tmp_scamble)
 		if err != nil {
 			t.Fatalf("failed to download s3 object locally: %v", err)
 		}
@@ -248,7 +249,7 @@ func TestS3ForSource(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create s3 object: %v", err)
 		}
-		f, err := nr.DownloadLocally()
+		f, err := nr.DownloadLocally(tmp_scamble)
 		if err != nil {
 			t.Fatalf("failed to download s3 object locally: %v", err)
 		}

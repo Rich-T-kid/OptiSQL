@@ -5,7 +5,7 @@ import (
 	"io"
 	"opti-sql-go/config"
 	"os"
-	"time"
+	"strings"
 
 	"github.com/minio/minio-go"
 )
@@ -80,8 +80,8 @@ func (n *NetworkResource) Seek(offset int64, whence int) (int64, error) {
 		return 0, fmt.Errorf("unsupported seek mode for S3: %d", whence)
 	}
 }
-func (n *NetworkResource) DownloadLocally() (*os.File, error) {
-	f, err := os.Create(fmt.Sprintf("%s-%d", n.key, time.Now().UnixNano()))
+func (n *NetworkResource) DownloadLocally(scramble string) (*os.File, error) {
+	f, err := os.Create(fmt.Sprintf("%s-%s", n.key, strings.Replace(scramble, " ", "-", -1)))
 	if err != nil {
 		return nil, err
 	}

@@ -23,7 +23,7 @@ var (
 type LimitExec struct {
 	input     operators.Operator
 	schema    *arrow.Schema
-	remaining uint16
+	Remaining uint16
 	done      bool
 }
 
@@ -31,7 +31,7 @@ func NewLimitExec(input operators.Operator, count uint16) (*LimitExec, error) {
 	return &LimitExec{
 		input:     input,
 		schema:    input.Schema(),
-		remaining: count,
+		Remaining: count,
 	}, nil
 }
 
@@ -43,26 +43,26 @@ func (l *LimitExec) Next(n uint16) (*operators.RecordBatch, error) {
 			RowCount: 0,
 		}, nil
 	}
-	if l.remaining == 0 {
+	if l.Remaining == 0 {
 		return nil, io.EOF
 	}
 	var childN uint16
 	switch {
-	case n < l.remaining:
+	case n < l.Remaining:
 		// We can fulfill the request fully
 		childN = n
-		l.remaining -= n
+		l.Remaining -= n
 
-	case n == l.remaining:
+	case n == l.Remaining:
 		// Exact request - done afterwards
 		childN = n
-		l.remaining = 0
+		l.Remaining = 0
 		l.done = true
 
-	case n > l.remaining:
+	case n > l.Remaining:
 		// Only have l.remaining left
-		childN = l.remaining
-		l.remaining = 0
+		childN = l.Remaining
+		l.Remaining = 0
 		l.done = true
 	}
 	childBatch, err := l.input.Next(childN)

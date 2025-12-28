@@ -161,7 +161,7 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 	fields := make([]arrow.Field, len(aggExprs))
 	for i, agg := range aggExprs {
 		dt, err := Expr.ExprDataType(agg.Child, child.Schema())
-		if err != nil || !validAggrType(dt) {
+		if err != nil || !validAggrType(agg, dt) {
 			return nil, ErrInvalidAggrColumnType(dt)
 		}
 		var fieldName string
@@ -219,6 +219,17 @@ func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
 			if err != nil {
 				return nil, err
 			}
+			if aggExpr.AggrFunc == Count {
+				accumulator := a.accumulators[i]
+				for j := 0; j < agrArray.Len(); j++ {
+					if agrArray.IsNull(j) {
+						continue
+					}
+					accumulator.Update(1) // doesnt matter what we pass here
+				}
+				continue
+			}
+
 			agrArray, err = castArrayToFloat64(agrArray)
 			if err != nil {
 				return nil, err
@@ -255,7 +266,10 @@ func (a *AggrExec) Close() error {
 	return a.input.Close()
 }
 
-func validAggrType(dt arrow.DataType) bool {
+func validAggrType(aggrT AggregateFunctions, dt arrow.DataType) bool {
+	if aggrT.AggrFunc == Count {
+		return true
+	}
 	switch dt.ID() {
 	case arrow.UINT8, arrow.UINT16, arrow.UINT32, arrow.UINT64,
 		arrow.INT8, arrow.INT16, arrow.INT32, arrow.INT64, arrow.FLOAT16, arrow.FLOAT32, arrow.FLOAT64:

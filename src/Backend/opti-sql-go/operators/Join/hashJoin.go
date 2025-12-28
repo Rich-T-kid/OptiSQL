@@ -17,8 +17,6 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
-// TODO: see ticket #27
-
 var (
 	ErrInvalidJoinClauseCount = func(l, r int) error {
 		return fmt.Errorf("mismatched number of join expressions between left and right, left: %d vs right: %d", l, r)
@@ -53,23 +51,23 @@ func (j JoinType) String() string {
 // taking in arrays of expressions allows for multiple join clauses
 // Example: JOIN t2 ON t1.region = t2.region AND t1.city = t2.city
 type JoinClause struct {
-	leftS  []Expr.Expression
-	rightS []Expr.Expression
+	LeftS  []Expr.Expression
+	RightS []Expr.Expression
 }
 
 func (j *JoinClause) String() string {
 	var b bytes.Buffer
 
 	// defensive: if lengths differ, print whatever pairs exist
-	n := len(j.leftS)
-	if len(j.rightS) < n {
-		n = len(j.rightS)
+	n := len(j.LeftS)
+	if len(j.RightS) < n {
+		n = len(j.RightS)
 	}
 
 	for i := 0; i < n; i++ {
-		b.WriteString(j.leftS[i].String())
+		b.WriteString(j.LeftS[i].String())
 		b.WriteString(" = ")
-		b.WriteString(j.rightS[i].String())
+		b.WriteString(j.RightS[i].String())
 
 		// add separator between pairs
 		if i < n-1 {
@@ -82,8 +80,8 @@ func (j *JoinClause) String() string {
 
 func NewJoinClause(leftS, rightS []Expr.Expression) JoinClause {
 	return JoinClause{
-		leftS:  leftS,
-		rightS: rightS,
+		LeftS:  leftS,
+		RightS: rightS,
 	}
 }
 
@@ -163,8 +161,8 @@ func NewHashJoinExec(left operators.Operator, right operators.Operator, clause J
 	if err != nil {
 		return nil, err
 	}
-	if len(clause.leftS) != len(clause.rightS) {
-		return nil, ErrInvalidJoinClauseCount(len(clause.leftS), len(clause.rightS))
+	if len(clause.LeftS) != len(clause.RightS) {
+		return nil, ErrInvalidJoinClauseCount(len(clause.LeftS), len(clause.RightS))
 	}
 	return &HashJoinExec{
 		leftSource:  left,
@@ -201,12 +199,12 @@ func (hj *HashJoinExec) Next(_ uint16) (*operators.RecordBatch, error) {
 	}
 	leftRowCount := leftArr[0].Len()
 	rightRowCount := rightArr[0].Len()
-	leftComp, err := buildComptables(hj.clause.leftS, leftArr, hj.leftSource.Schema())
+	leftComp, err := buildComptables(hj.clause.LeftS, leftArr, hj.leftSource.Schema())
 	if err != nil {
 		return nil, err
 	}
 
-	rightComp, err := buildComptables(hj.clause.rightS, rightArr, hj.rightSource.Schema())
+	rightComp, err := buildComptables(hj.clause.RightS, rightArr, hj.rightSource.Schema())
 	if err != nil {
 		return nil, err
 	}
