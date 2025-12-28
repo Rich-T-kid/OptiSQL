@@ -46,12 +46,14 @@ When applicable, expressions **may include an explicit Arrow type** to avoid inf
 
 ## `Valid Aggregations functions`
 
+#### note they are lower case
+
 ```bash
-"Sum"
-"Count"
-"Avg"
-"Min"
-"Max"
+"sum"
+"count"
+"avg"
+"min"
+"max"
 ```
 
 ## `ColumnResolve`

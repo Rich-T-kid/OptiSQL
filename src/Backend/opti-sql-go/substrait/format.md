@@ -150,11 +150,11 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
     "input": {operator},
     "by": [
       {
-        "Expr": {Expression},
+        "expr": {Expression},
         "asc": boolean
       },
       {
-        "Expr": {Expression},
+        "expr": {Expression},
         "asc": boolean
       }
     ]
@@ -175,9 +175,12 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
   "Operator": "Aggregate",
   "Aggregate": {
     "input": {operator},
-    "function": "Sum",
-    "column": {Expression},
-    "alias": "sum_a"
+    "aggrs": [
+      {
+      "function": "sum",
+      "expr": {Expression},
+      }
+    ]
   }
 }
 ```
@@ -224,6 +227,10 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
       {
         "left":  { "expr_type": "ColumnResolve", "name": "a.id" },
         "right": { "expr_type": "ColumnResolve", "name": "b.id" }
+      },
+      {
+        "left":  { "expr_type": "ColumnResolve", "name": "a.age" },
+        "right": { "expr_type": "ColumnResolve", "name": "b.distance" }
       }
     ]
   }
@@ -254,11 +261,10 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
     "group_by": [
       { "expr_type": "ColumnResolve", "name": "b" }
     ],
-    "aggregates": [
+    "aggrs": [
       {
         "function": "Sum",
-        "column": "a",
-        "alias": "sum_a"
+        "expr": {Expression},
       }
     ]
   }

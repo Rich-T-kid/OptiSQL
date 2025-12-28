@@ -148,7 +148,7 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 		}
 		op = limitOP
 		return &Emiter{op}, nil
-	case "Aggregate":
+	case "aggregate":
 		aggrOP, err := parseSingleAggr(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("single-aggr", err.Error())
@@ -255,12 +255,34 @@ func parseFilter(filterOBJ jsonOBJ, plan *planMetaData) (*filter.FilterExec, err
 	if err != nil {
 		return nil, err
 	}
+	var validExpr func(e Expr.Expression) bool // only here so we can call validExpr recusivly
+	validExpr = func(e Expr.Expression) bool {
+		be, ok := e.(*Expr.BinaryExpr)
+		if !ok {
+			return false
+		}
+		switch be.Op {
+		case Expr.Equal,
+			Expr.NotEqual,
+			Expr.LessThan,
+			Expr.LessThanOrEqual,
+			Expr.GreaterThan,
+			Expr.GreaterThanOrEqual:
+			return true
+		case Expr.And, Expr.Or:
+			return validExpr(be.Left) && validExpr(be.Right)
+		default:
+			return false
+		}
+	}
+	if !validExpr(expression) {
+		return nil, fmt.Errorf("%s is not a valid filter/having expression, must evaluate to boolean mask", expression)
+	}
 
 	input, err := resolveInput(filterOBJ["input"].(map[string]any), plan)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("input schema: \t%v\n", input.Schema())
 	return filter.NewFilterExec(input, expression)
 }
 func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
@@ -296,8 +318,57 @@ func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec,
 	}
 	return project.NewProjectExec(sourceInput, expres)
 }
-func parseSort(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
-	return nil, nil
+func parseSort(sortOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
+	fields := []string{"input", "by"}
+	err := containsFields(fields, sortOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "array"}, sortOBJ)
+	if err != nil {
+		return nil, err
+	}
+	parseBy := func(obj []map[string]any) ([]aggr.SortKey, error) {
+		var outputKeys []aggr.SortKey
+		for _, byexpr := range obj {
+			byFields := []string{"expr", "asc"}
+			err := containsFields(byFields, byexpr)
+			if err != nil {
+				return nil, err
+			}
+			err = correctFieldTypes(byFields, []string{"object", "boolean"}, byexpr)
+			if err != nil {
+				return nil, err
+			}
+			expr, err := parseExpression(byexpr["expr"].(map[string]any))
+			if err != nil {
+				return nil, err
+			}
+			asc := byexpr["asc"].(bool)
+			outputKeys = append(outputKeys, aggr.SortKey{
+				Expr:      expr,
+				Ascending: asc,
+			})
+
+		}
+		return outputKeys, nil
+	}
+	input, err := resolveInput(sortOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+	byField, ok := sortOBJ["by"].([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("Sort::by field is malformed, should be an array of objects")
+	}
+	sortKeys, err := parseBy(byField)
+	if err != nil {
+		return nil, err
+	}
+	if len(sortKeys) < 1 {
+		return nil, fmt.Errorf("sort keys must be present for Sort operator")
+	}
+	return aggr.NewSortExec(input, sortKeys)
 }
 func parseDistinct(distinctOBJ jsonOBJ, plan *planMetaData) (*filter.DistinctExec, error) {
 	fields := []string{"input", "expressions"}
@@ -360,13 +431,135 @@ func parseLimit(limitOBJ jsonOBJ, plan *planMetaData) (*filter.LimitExec, error)
 }
 
 func parseSingleAggr(aggrOBJ jsonOBJ, plan *planMetaData) (*aggr.AggrExec, error) {
-	return nil, nil
+	fields := []string{"input", "aggrs"}
+	err := containsFields(fields, aggrOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "array"}, aggrOBJ)
+	if err != nil {
+		return nil, err
+	}
+
+	input, err := resolveInput(aggrOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+	globalAggrs, err := generateAggrs(aggrOBJ["aggrs"].([]map[string]any))
+	if err != nil {
+		return nil, err
+	}
+	if len(globalAggrs) < 1 {
+		return nil, fmt.Errorf("there must be atleast one aggregation")
+	}
+	return aggr.NewGlobalAggrExec(input, globalAggrs)
 }
-func parseGroupBy(sourceOBJ jsonOBJ, plan *planMetaData) (*aggr.GroupByExec, error) {
-	return nil, nil
+func parseGroupBy(groupbyOBJ jsonOBJ, plan *planMetaData) (*aggr.GroupByExec, error) {
+	fields := []string{"input", "group_by", "aggrs"}
+	err := containsFields(fields, groupbyOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "array", "array"}, groupbyOBJ)
+	if err != nil {
+		return nil, err
+	}
+	input, err := resolveInput(groupbyOBJ["input"].(map[string]any), plan)
+	if err != nil {
+		return nil, err
+	}
+	var groupByStatments []Expr.Expression
+	group_by, ok := groupbyOBJ["group_by"].([]map[string]any) // array of expressions
+	if !ok {
+		return nil, fmt.Errorf("group by statments are malformed, should be an array of expressions")
+	}
+	for _, gb := range group_by {
+		e, err := parseExpression(gb)
+		if err != nil {
+			return nil, err
+		}
+		groupByStatments = append(groupByStatments, e)
+	}
+	rawAggrs, ok := groupbyOBJ["aggrs"].([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("aggrs malformed, should be an array of aggregations")
+	}
+	aggrs, err := generateAggrs(rawAggrs)
+	if err != nil {
+		return nil, err
+	}
+	if len(groupByStatments) == 0 {
+		return nil, fmt.Errorf("invalid GROUP BY: must have at least one group_by key")
+	}
+	if len(aggrs) == 0 {
+		return nil, fmt.Errorf("invalid GROUP BY: must have at least one aggregation")
+	}
+	return aggr.NewGroupByExec(input, aggrs, groupByStatments)
 }
-func parseJoin(sourceOBJ jsonOBJ, plan *planMetaData) (*join.HashJoinExec, error) {
-	return nil, nil
+func parseJoin(joinOBJ jsonOBJ, plan *planMetaData) (*join.HashJoinExec, error) {
+	fields := []string{"left", "right", "join_type", "on"}
+	err := containsFields(fields, joinOBJ)
+	if err != nil {
+		return nil, err
+	}
+	err = correctFieldTypes(fields, []string{"object", "object", "string", "array"}, joinOBJ)
+	if err != nil {
+		return nil, err
+	}
+	leftObj, ok := joinOBJ["left"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("malformed join body, `left` field must be an operator/object")
+	}
+	left, err := resolveInput(leftObj, plan)
+	if err != nil {
+		return nil, err
+	}
+	rightObj, ok := joinOBJ["right"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("malformed join body ,`right` field must be an operator/object")
+	}
+	right, err := resolveInput(rightObj, plan)
+	if err != nil {
+		return nil, err
+	}
+	joinType := strings.ToLower(joinOBJ["join_type"].(string))
+	if joinType != "inner" {
+		return nil, fmt.Errorf("invalid join type provided %s only inner is supported", joinType)
+	}
+	clauseParer := func(clause []map[string]any) (join.JoinClause, error) {
+		var jc join.JoinClause
+		for _, c := range clause {
+			f := []string{"left", "right"}
+			err := containsFields(f, c)
+			if err != nil {
+				return jc, err
+			}
+			err = correctFieldTypes(f, []string{"object", "object"}, c)
+			if err != nil {
+				return jc, err
+			}
+			leftExpr, err := parseExpression(c["left"].(map[string]any))
+			if err != nil {
+				return jc, err
+			}
+			rightExpr, err := parseExpression(c["right"].(map[string]any))
+			if err != nil {
+				return jc, err
+			}
+			jc.LeftS = append(jc.LeftS, leftExpr)
+			jc.RightS = append(jc.RightS, rightExpr)
+		}
+		if len(jc.LeftS) < 1 {
+			return jc, fmt.Errorf("join clause cannot be empyy")
+		}
+		return jc, nil
+	}
+	jc, err := clauseParer(joinOBJ["on"].([]map[string]any))
+	if err != nil {
+		return nil, err
+	}
+
+	return join.NewHashJoinExec(left, right, jc, join.InnerJoin, nil)
 }
 
 // carbon clone of
@@ -379,7 +572,6 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 	// grab tje expr_type and then parse based on that
 	err := containsFields([]string{"expr_type"}, m)
 	if err != nil {
-		fmt.Printf("(parseExpression) eror: %v\n", err)
 		return nil, fmt.Errorf("malformed expression body. Doesnt contain expr_type field")
 	}
 	switch m["expr_type"].(string) {
@@ -560,7 +752,6 @@ func resolveInput(m jsonOBJ, plan *planMetaData) (operators.Operator, error) {
 	switch strings.ToLower(opName) {
 	// base case, we hit a leaf node (source node)
 	case "source": // return concrete base case here
-		print("source case \n")
 		return parseSource(newOBJ, plan)
 	case "project":
 		return parseProject(newOBJ, plan)
@@ -702,18 +893,54 @@ func validBinaryOp(s string) (Expr.BinaryOperator, error) {
 	}
 }
 
-// ! figure out which are valid here
-// ! the expression needs to evaluate to a boolean mask
-/*
-something like this should be caught at parse time not run time (if possible)
-"input": sourceInput,
-				"expression": map[string]any{
-					"expr_type": "LiteralResolve",
-					"value":     "Canada",
-					"lit_type":  "string",
-				},
+// call strings.toLower before invoking this method
+func validFN(s string) bool {
+	switch s {
+	case "sum", "count", "avg", "min", "max":
+		return true
+	default:
+		return false
+	}
+}
 
-*/
-func validFilterExpr(e Expr.Expression) bool {
-	return false
+func toAggrFn(s string) aggr.AggrFunc {
+	switch s {
+	case "sum":
+		return aggr.Sum
+	case "count":
+		return aggr.Count
+	case "avg":
+		return aggr.Avg
+	case "min":
+		return aggr.Min
+	case "max":
+		return aggr.Max
+	}
+	fmt.Printf("got %s which is not supported", s)
+	return -1
+}
+
+func generateAggrs(aggrs []map[string]any) ([]aggr.AggregateFunctions, error) {
+	var globalAggrs []aggr.AggregateFunctions
+	for _, a := range aggrs {
+		fields := []string{"function", "expr"}
+		err := containsFields(fields, a)
+		if err != nil {
+			return nil, err
+		}
+		err = correctFieldTypes(fields, []string{"string", "object"}, a)
+		if err != nil {
+			return nil, err
+		}
+		fn := strings.ToLower(a["function"].(string))
+		if !validFN(fn) {
+			return nil, fmt.Errorf("%s is not a valid aggregation method", fn)
+		}
+		expr, err := parseExpression(a["expr"].(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+		globalAggrs = append(globalAggrs, aggr.NewAggregateFunctions(toAggrFn(fn), expr))
+	}
+	return globalAggrs, nil
 }

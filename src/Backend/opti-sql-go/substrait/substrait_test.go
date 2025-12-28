@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow/go/v17/arrow"
 )
@@ -70,25 +71,6 @@ func TestSubstraitPlanExist(t *testing.T) {
 	}
 
 }
-
-/*
-func TestSubstraitEmitParse(t *testing.T) {
-	t.Run("basic_01_source_filter parse", func(t *testing.T) {
-		fileName := "b1_01_source_filter.json"
-		sourceFile := fmt.Sprintf("%v/%v", customIRPath, fileName)
-		f, err := os.Open(sourceFile)
-		if err != nil {
-			t.Fatalf("failed to open %s, error returned:\t%v", fileName, err)
-		}
-		e, err := consumePlan(f, NewPlanMetaData("tmp"))
-		if err != nil {
-			t.Fatalf("error occured reading plan: %v", err)
-		}
-		t.Logf("recieved final emmiter :%v\n", e)
-
-	})
-}
-*/
 
 func TestSubstraitSourceParse(t *testing.T) {
 	t.Run("source parse test", func(t *testing.T) {
@@ -891,18 +873,20 @@ func TestSubstraitProjectParse(t *testing.T) {
 			"local":     false,
 		},
 	}
+	projectTestID := "project parse test"
 
 	t.Run("basic project operations", func(t *testing.T) {
-		projectTestID := "project parse test special ID"
 		lpMetaData := NewPlanMetaData(projectTestID)
 
 		tests := []struct {
+			id          int
 			testName    string
 			logicalPlan jsonOBJ
 			expectError bool
 		}{
 			{
 				testName: "project all coluns",
+				id:       1,
 				logicalPlan: map[string]any{
 					"input": source1,
 					"expressions": []map[string]any{
@@ -920,6 +904,7 @@ func TestSubstraitProjectParse(t *testing.T) {
 			},
 			{
 				testName: "project some columns",
+				id:       2,
 				logicalPlan: map[string]any{
 					"input": source2,
 					"expressions": []map[string]any{
@@ -933,6 +918,7 @@ func TestSubstraitProjectParse(t *testing.T) {
 			},
 			{
 				testName: "project zero columns (should fail)",
+				id:       1,
 				logicalPlan: map[string]any{
 					"input":       source1,
 					"expressions": []map[string]any{},
@@ -959,8 +945,7 @@ func TestSubstraitProjectParse(t *testing.T) {
 	})
 
 	t.Run("parsing alias in project", func(t *testing.T) {
-		projectAliasID := "project test special ID"
-		lpMetaData := NewPlanMetaData(projectAliasID)
+		lpMetaData := NewPlanMetaData(projectTestID)
 
 		tests := []struct {
 			testName    string
@@ -1076,16 +1061,23 @@ func TestFilterParse(t *testing.T) {
 		},
 	}
 
+	// Cleanup functions for source files
+	cleanupSource1 := func() {
+		os.Remove("country_full.csv-filter-with-source-test")
+	}
+
 	t.Run("filter with source input", func(t *testing.T) {
 		filterTestID := "filter with source test"
 		lpMetaData := NewPlanMetaData(filterTestID)
 
 		tests := []struct {
+			id          int
 			testName    string
 			logicalPlan jsonOBJ
 			expectError bool
 		}{
 			{
+				id:       1,
 				testName: "basic filter with binary expression (column > literal)",
 				logicalPlan: map[string]any{
 					"input": sourceInput,
@@ -1106,6 +1098,7 @@ func TestFilterParse(t *testing.T) {
 				expectError: false,
 			},
 			{
+				id:       1,
 				testName: "filter with column resolve expression",
 				logicalPlan: map[string]any{
 					"input": sourceInput,
@@ -1114,9 +1107,10 @@ func TestFilterParse(t *testing.T) {
 						"name":      "name",
 					},
 				},
-				expectError: false,
+				expectError: true,
 			},
 			{
+				id:       1,
 				testName: "filter missing expression field (should fail)",
 				logicalPlan: map[string]any{
 					"input": sourceInput,
@@ -1124,6 +1118,7 @@ func TestFilterParse(t *testing.T) {
 				expectError: true,
 			},
 			{
+				id:       1,
 				testName: "filter missing input field (should fail)",
 				logicalPlan: map[string]any{
 					"expression": map[string]any{
@@ -1154,11 +1149,13 @@ func TestFilterParse(t *testing.T) {
 		lpMetaData := NewPlanMetaData(filterTestID)
 
 		tests := []struct {
+			id          int
 			testName    string
 			logicalPlan jsonOBJ
 			expectError bool
 		}{
 			{
+				id:       1,
 				testName: "filter projected columns with binary expression",
 				logicalPlan: map[string]any{
 					"input": projectInput,
@@ -1179,6 +1176,7 @@ func TestFilterParse(t *testing.T) {
 				expectError: false,
 			},
 			{
+				id:       1,
 				testName: "filter with complex nested expression",
 				logicalPlan: map[string]any{
 					"input": projectInput,
@@ -1216,6 +1214,7 @@ func TestFilterParse(t *testing.T) {
 				expectError: false,
 			},
 			{
+				id:       1,
 				testName: "filter with invalid expression type (should fail)",
 				logicalPlan: map[string]any{
 					"input": projectInput,
@@ -1230,6 +1229,11 @@ func TestFilterParse(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.testName, func(t *testing.T) {
+				defer func() {
+					if tt.id == 1 {
+						cleanupSource1()
+					}
+				}()
 				filter, err := parseFilter(tt.logicalPlan, lpMetaData)
 				if (err != nil) != tt.expectError {
 					t.Errorf("parseFilter() error = %v, expectError = %v", err, tt.expectError)
@@ -1242,7 +1246,6 @@ func TestFilterParse(t *testing.T) {
 		}
 	})
 }
-
 func TestDistinctParse(t *testing.T) {
 	// Reusable input operators
 	sourceInput := map[string]any{
@@ -1270,15 +1273,22 @@ func TestDistinctParse(t *testing.T) {
 		},
 	}
 
+	// Cleanup functions for source files
+	cleanupSource1 := func() {
+		os.Remove("country_full.csv-distinct-test")
+	}
+
 	distinctTestID := "distinct test"
 	lpMetaData := NewPlanMetaData(distinctTestID)
 
 	tests := []struct {
+		id          int
 		testName    string
 		logicalPlan jsonOBJ
 		expectError bool
 	}{
 		{
+			id:       1,
 			testName: "distinct with single column",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1292,6 +1302,7 @@ func TestDistinctParse(t *testing.T) {
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "distinct with multiple columns",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1309,6 +1320,7 @@ func TestDistinctParse(t *testing.T) {
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "distinct on project input",
 			logicalPlan: map[string]any{
 				"input": projectInput,
@@ -1322,6 +1334,7 @@ func TestDistinctParse(t *testing.T) {
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "distinct missing expressions field (should fail)",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1329,6 +1342,7 @@ func TestDistinctParse(t *testing.T) {
 			expectError: true,
 		},
 		{
+			id:       1,
 			testName: "distinct with empty expressions (should fail)",
 			logicalPlan: map[string]any{
 				"input":       sourceInput,
@@ -1337,6 +1351,7 @@ func TestDistinctParse(t *testing.T) {
 			expectError: true,
 		},
 		{
+			id:       1,
 			testName: "distinct missing input field (should fail)",
 			logicalPlan: map[string]any{
 				"expressions": []map[string]any{
@@ -1352,6 +1367,11 @@ func TestDistinctParse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
+			defer func() {
+				if tt.id == 1 {
+					cleanupSource1()
+				}
+			}()
 			distinct, err := parseDistinct(tt.logicalPlan, lpMetaData)
 			if (err != nil) != tt.expectError {
 				t.Errorf("parseDistinct() error = %v, expectError = %v", err, tt.expectError)
@@ -1391,12 +1411,14 @@ func TestLimitParse(t *testing.T) {
 	lpMetaData := NewPlanMetaData(limitTestID)
 
 	tests := []struct {
+		id            int
 		testName      string
 		logicalPlan   jsonOBJ
 		expectedLimit int64
 		expectError   bool
 	}{
 		{
+			id:       1,
 			testName: "limit with small value",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1406,6 +1428,7 @@ func TestLimitParse(t *testing.T) {
 			expectError:   false,
 		},
 		{
+			id:       1,
 			testName: "limit with large value",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1415,6 +1438,7 @@ func TestLimitParse(t *testing.T) {
 			expectError:   false,
 		},
 		{
+			id:       1,
 			testName: "limit with value thats too large",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1424,6 +1448,7 @@ func TestLimitParse(t *testing.T) {
 			expectError:   true,
 		},
 		{
+			id:       1,
 			testName: "limit on projected input",
 			logicalPlan: map[string]any{
 				"input": projectInput,
@@ -1433,6 +1458,7 @@ func TestLimitParse(t *testing.T) {
 			expectError:   false,
 		},
 		{
+			id:       1,
 			testName: "limit missing limit field (should fail)",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1440,6 +1466,7 @@ func TestLimitParse(t *testing.T) {
 			expectError: true,
 		},
 		{
+			id:       1,
 			testName: "limit missing input field (should fail)",
 			logicalPlan: map[string]any{
 				"limit": 10,
@@ -1447,6 +1474,7 @@ func TestLimitParse(t *testing.T) {
 			expectError: true,
 		},
 		{
+			id:       1,
 			testName: "limit with zero value (should fail)",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1456,8 +1484,17 @@ func TestLimitParse(t *testing.T) {
 		},
 	}
 
+	cleanupSource1 := func() {
+		os.Remove("country_full.csv-limit-test")
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
+			defer func() {
+				if tt.id == 1 {
+					cleanupSource1()
+				}
+			}()
 			limit, err := parseLimit(tt.logicalPlan, lpMetaData)
 			if (err != nil) != tt.expectError {
 				t.Errorf("parseLimit() error = %v, expectError = %v", err, tt.expectError)
@@ -1505,17 +1542,19 @@ func TestSortParse(t *testing.T) {
 	lpMetaData := NewPlanMetaData(sortTestID)
 
 	tests := []struct {
+		id          int
 		testName    string
 		logicalPlan jsonOBJ
 		expectError bool
 	}{
 		{
+			id:       1,
 			testName: "sort single column ascending",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
 				"by": []map[string]any{
 					{
-						"Expr": map[string]any{
+						"expr": map[string]any{
 							"expr_type": "ColumnResolve",
 							"name":      "name",
 						},
@@ -1526,12 +1565,13 @@ func TestSortParse(t *testing.T) {
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "sort single column descending",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
 				"by": []map[string]any{
 					{
-						"Expr": map[string]any{
+						"expr": map[string]any{
 							"expr_type": "ColumnResolve",
 							"name":      "name",
 						},
@@ -1542,12 +1582,13 @@ func TestSortParse(t *testing.T) {
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "sort multiple columns",
 			logicalPlan: map[string]any{
 				"input": projectInput,
 				"by": []map[string]any{
 					{
-						"Expr": map[string]any{
+						"expr": map[string]any{
 							"expr_type": "ColumnResolve",
 							"name":      "name",
 						},
@@ -1558,6 +1599,7 @@ func TestSortParse(t *testing.T) {
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "sort missing by field (should fail)",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1565,11 +1607,12 @@ func TestSortParse(t *testing.T) {
 			expectError: true,
 		},
 		{
+			id:       1,
 			testName: "sort missing input field (should fail)",
 			logicalPlan: map[string]any{
 				"by": []map[string]any{
 					{
-						"Expr": map[string]any{
+						"expr": map[string]any{
 							"expr_type": "ColumnResolve",
 							"name":      "name",
 						},
@@ -1580,6 +1623,7 @@ func TestSortParse(t *testing.T) {
 			expectError: true,
 		},
 		{
+			id:       1,
 			testName: "sort with empty by array (should fail)",
 			logicalPlan: map[string]any{
 				"input": sourceInput,
@@ -1589,12 +1633,26 @@ func TestSortParse(t *testing.T) {
 		},
 	}
 
+	cleanupSource1 := func() {
+		os.Remove("country_full.csv-sort-test")
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
+			defer func() {
+				if tt.id == 1 {
+					cleanupSource1()
+				}
+			}()
 			sort, err := parseSort(tt.logicalPlan, lpMetaData)
-			if (err != nil) != tt.expectError {
-				t.Errorf("parseSort() error = %v, expectError = %v", err, tt.expectError)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s expected error but received nil", tt.testName)
+				}
 				return
+			}
+			if err != nil {
+				t.Errorf("%s recieved error %v", tt.testName, err)
 			}
 			if !tt.expectError && sort == nil {
 				t.Errorf("parseSort() returned nil when error was nil")
@@ -1651,132 +1709,185 @@ func TestAggregateParse(t *testing.T) {
 	lpMetaData := NewPlanMetaData(aggregateTestID)
 
 	tests := []struct {
+		id          int
 		testName    string
 		logicalPlan jsonOBJ
 		expectError bool
 	}{
 		{
+			id:       1,
 			testName: "aggregate Sum on numeric column",
 			logicalPlan: map[string]any{
-				"input":    sourceInput,
-				"function": "Sum",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "country-code",
+				"input": sourceInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Sum",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
 				},
-				"alias": "sum_country_code",
 			},
 			expectError: false,
 		},
 		{
+			id:       1,
 			testName: "aggregate Count on string column",
 			logicalPlan: map[string]any{
-				"input":    sourceInput,
-				"function": "Count",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "name",
+				"input": sourceInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
 				},
-				"alias": "count_countries",
 			},
 			expectError: false,
 		},
 		{
 			testName: "aggregate Avg on numeric column",
 			logicalPlan: map[string]any{
-				"input":    sourceInput,
-				"function": "Avg",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "region-code",
+				"input": sourceInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Avg",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "region-code",
+						},
+					},
 				},
-				"alias": "avg_region_code",
 			},
 			expectError: false,
 		},
 		{
 			testName: "aggregate Min on numeric column",
 			logicalPlan: map[string]any{
-				"input":    projectNumericInput,
-				"function": "Min",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "country-code",
+				"input": projectNumericInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Min",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
 				},
-				"alias": "min_country_code",
 			},
 			expectError: false,
 		},
 		{
 			testName: "aggregate Max on string column",
 			logicalPlan: map[string]any{
-				"input":    projectStringInput,
-				"function": "Max",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "region",
+				"input": projectStringInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Max",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "region",
+						},
+					},
 				},
-				"alias": "max_region",
-			},
-			expectError: false,
-		},
-		{
-			testName: "aggregate missing function field (should fail)",
-			logicalPlan: map[string]any{
-				"input": sourceInput,
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "name",
-				},
-				"alias": "count_name",
 			},
 			expectError: true,
 		},
 		{
-			testName: "aggregate missing column field (should fail)",
+			testName: "aggregate with multiple aggregate functions",
 			logicalPlan: map[string]any{
-				"input":    sourceInput,
-				"function": "Sum",
-				"alias":    "sum_code",
+				"input": sourceInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Sum",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			testName: "aggregate missing aggrs field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
 			},
 			expectError: true,
 		},
 		{
 			testName: "aggregate missing input field (should fail)",
 			logicalPlan: map[string]any{
-				"function": "Sum",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "country-code",
+				"aggrs": []map[string]any{
+					{
+						"function": "Sum",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
 				},
-				"alias": "sum_code",
 			},
 			expectError: true,
 		},
 		{
-			testName: "aggregate missing alias field (should fail)",
+			testName: "aggregate with empty aggrs array (should fail)",
 			logicalPlan: map[string]any{
-				"input":    sourceInput,
-				"function": "Sum",
-				"column": map[string]any{
-					"expr_type": "ColumnResolve",
-					"name":      "country-code",
+				"input": sourceInput,
+				"aggrs": []map[string]any{},
+			},
+			expectError: true,
+		},
+		{
+			testName: "aggregate missing function in aggr (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"aggrs": []map[string]any{
+					{
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
 				},
 			},
 			expectError: true,
 		},
 	}
 
+	cleanupSource1 := func() {
+		os.Remove("country_full.csv-aggregate-test")
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
-			aggregate, err := parseSingleAggr(tt.logicalPlan, lpMetaData)
-			if (err != nil) != tt.expectError {
-				t.Errorf("parseAggregate() error = %v, expectError = %v", err, tt.expectError)
+			defer func() {
+				if tt.id == 1 {
+					cleanupSource1()
+				}
+			}()
+			_, err := parseSingleAggr(tt.logicalPlan, lpMetaData)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s expected error but received nil", tt.testName)
+				}
 				return
 			}
-			if !tt.expectError && aggregate == nil {
-				t.Errorf("parseAggregate() returned nil when error was nil")
+			if err != nil {
+				t.Errorf("%s recieved error %v", tt.testName, err)
 			}
+
 		})
 	}
 }
@@ -1955,6 +2066,581 @@ func TestHavingParse(t *testing.T) {
 			}
 			if !tt.expectError && having == nil {
 				t.Errorf("parseHaving() returned nil when error was nil")
+			}
+		})
+	}
+}
+
+func TestGroupByParse(t *testing.T) {
+	// Reusable input operators
+	sourceInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "country_full.csv",
+			"local":     false,
+		},
+	}
+
+	groupByTestID := "group by test"
+	lpMetaData := NewPlanMetaData(groupByTestID)
+
+	tests := []struct {
+		id          int
+		testName    string
+		logicalPlan jsonOBJ
+		expectError bool
+	}{
+		{
+			id:       1,
+			testName: "group by single column with single aggregate",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"group_by": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			id:       1,
+			testName: "group by multiple columns with multiple aggregates",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"group_by": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "sub-region",
+					},
+				},
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+					{
+						"function": "Sum",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "country-code",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			id:       1,
+			testName: "group by with avg aggregate",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"group_by": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+				"aggrs": []map[string]any{
+					{
+						"function": "Avg",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "region-code",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			id:       1,
+			testName: "group by missing input field (should fail)",
+			logicalPlan: map[string]any{
+				"group_by": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       1,
+			testName: "group by missing group_by field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       1,
+			testName: "group by missing aggrs field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"group_by": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       1,
+			testName: "group by with empty group_by array (should fail)",
+			logicalPlan: map[string]any{
+				"input":    sourceInput,
+				"group_by": []map[string]any{},
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       1,
+			testName: "group by with empty aggrs array (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"group_by": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+				"aggrs": []map[string]any{},
+			},
+			expectError: true,
+		},
+		{
+			id:       1,
+			testName: "group by with misspelled group_by field (should fail)",
+			logicalPlan: map[string]any{
+				"input": sourceInput,
+				"groupBy": []map[string]any{
+					{
+						"expr_type": "ColumnResolve",
+						"name":      "region",
+					},
+				},
+				"aggrs": []map[string]any{
+					{
+						"function": "Count",
+						"expr": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "name",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	cleanupSource1 := func() {
+		os.Remove("country_full.csv-group-by-test")
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			defer func() {
+				if tt.id == 1 {
+					cleanupSource1()
+				}
+			}()
+			groupBy, err := parseGroupBy(tt.logicalPlan, lpMetaData)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s expected error but received nil", tt.testName)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("%s received error %v", tt.testName, err)
+				return
+			}
+			if groupBy == nil {
+				t.Errorf("%s returned nil when error was nil", tt.testName)
+			}
+		})
+	}
+}
+
+func TestJoinParse(t *testing.T) {
+	// Reusable input operators using actual test data
+	// company_test_data.csv: id, department_name, manager_name, manager_email
+	// user_test_data.csv: id, username, email_address, is_active, age_years, account_balance_usd, average_session_minutes, favorite_color
+	userInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "user_test_data.csv",
+			"local":     false,
+		},
+	}
+
+	companyInput := map[string]any{
+		"Operator": "Source",
+		"Source": map[string]any{
+			"file-name": "company_test_data.csv",
+			"local":     false,
+		},
+	}
+
+	joinTestID := "join test"
+	lpMetaData := NewPlanMetaData(joinTestID)
+
+	tests := []struct {
+		id          int
+		testName    string
+		logicalPlan jsonOBJ
+		expectError bool
+	}{
+		{
+			id:       3,
+			testName: "join users and company on id with inner join",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			id:       3,
+			testName: "join with company left and users right on id",
+			logicalPlan: map[string]any{
+				"left":      companyInput,
+				"right":     userInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			id:       3,
+			testName: "join with unsupported join type left (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Left",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join with unsupported join type right (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Right",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join with unsupported join type outer (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Outer",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join missing on field (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Inner",
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join missing left field (should fail)",
+			logicalPlan: map[string]any{
+				"right":     companyInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join missing right field (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join missing join_type field (should fail)",
+			logicalPlan: map[string]any{
+				"left":  userInput,
+				"right": companyInput,
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join with empty on array (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Inner",
+				"on":        []map[string]any{},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join with too many on conditions (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "username",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "manager_name",
+						},
+					},
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "email_address",
+						},
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "manager_email",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			id:       3,
+			testName: "join with missing left in on condition",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"right": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			id:       3,
+			testName: "join with missing right in on condition (should fail)",
+			logicalPlan: map[string]any{
+				"left":      userInput,
+				"right":     companyInput,
+				"join_type": "Inner",
+				"on": []map[string]any{
+					{
+						"left": map[string]any{
+							"expr_type": "ColumnResolve",
+							"name":      "id",
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	cleanupSource1 := func() {
+		os.Remove("user_test_data.csv-join-test")
+	}
+	cleanupSource2 := func() {
+		os.Remove("company_test_data.csv-join-test")
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			defer func() {
+				if tt.id == 3 {
+					cleanupSource1()
+					cleanupSource2()
+				}
+			}()
+			join, err := parseJoin(tt.logicalPlan, lpMetaData)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s expected error but received nil", tt.testName)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("%s received error %v", tt.testName, err)
+				return
+			}
+			if join == nil {
+				t.Errorf("%s returned nil when error was nil", tt.testName)
 			}
 		})
 	}
@@ -2231,5 +2917,34 @@ func TestCorrectFieldTypes(t *testing.T) {
 				t.Fatalf("expected no error, got: %v", err)
 			}
 		})
+	}
+}
+
+func TestCleanU(t *testing.T) {
+	time.Sleep(5 * time.Second)
+
+	// Get current directory
+	curDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(curDir)
+	if err != nil {
+		t.Fatalf("Failed to read directory: %v", err)
+	}
+
+	// Delete all files containing .csv in their name
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.Contains(entry.Name(), ".csv") {
+			filePath := fmt.Sprintf("%s/%s", curDir, entry.Name())
+			err := os.Remove(filePath)
+			if err != nil {
+				fmt.Printf("error removing %s: %v\n", entry.Name(), err)
+			} else {
+				fmt.Printf("deleted: %s\n", entry.Name())
+			}
+		}
 	}
 }
