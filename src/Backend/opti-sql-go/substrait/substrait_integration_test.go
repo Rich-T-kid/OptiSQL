@@ -1187,37 +1187,109 @@ func TestOperatorsIntegration(t *testing.T) {
 func TestSubstraitFilesBasic(t *testing.T) {
 	basePath := filepath.Join("..", "..", "test_data", "substrait_plans", "basic")
 
-	mediumFileTests := []FileIntegrationTest{
+	basicFileTests := []FileIntegrationTest{
 		{
 			name:        "basic__00_test.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "basic_00_test.json"),
-			sqlEquiv:    "SELECT col1, col2 FROM source WHERE col3 > 5 ORDER BY col1",
+			sqlEquiv:    "tbd",
 		},
 
+		{
+			name:        "basic_01_filter_project_sort.json",
+			shouldError: false,
+			filePath:    filepath.Join(basePath, "basic_01_source_filter.json"),
+			sqlEquiv:    "tbd",
+		},
+		{
+			name:        "basic_02_project.json",
+			shouldError: false,
+			filePath:    filepath.Join(basePath, "basic_02_project.json"),
+			sqlEquiv:    "",
+		},
+		{
+			name:        "basic_03_sort.json",
+			shouldError: false,
+			filePath:    filepath.Join(basePath, "basic_03_sort.json"),
+			sqlEquiv:    "tbd",
+		},
+		{
+			name:        "basic_04_distinct.json",
+			shouldError: false,
+			filePath:    filepath.Join(basePath, "basic_04_distinct.json"),
+			sqlEquiv:    "tbd",
+		},
+		{
+			name:        "basic_05_limit.json",
+			shouldError: false,
+			filePath:    filepath.Join(basePath, "basic_05_limit.json"),
+			sqlEquiv:    "tbd",
+		},
+		{
+			name:        "basic_06_aggr.json",
+			shouldError: false,
+			filePath:    filepath.Join(basePath, "basic_06_aggr.json"),
+			sqlEquiv:    "tbd",
+		},
+	}
+	for _, test := range basicFileTests {
+		t.Run(test.name, func(t *testing.T) {
+			file, err := os.Open(test.filePath)
+			if err != nil {
+				t.Logf("Skipping %s: file not found err :%v \n", test.name, err)
+				return
+			}
+			defer file.Close()
+
+			emitter, err := ConsumeSubstraitPlan(file)
+
+			if (err != nil) != test.shouldError {
+				t.Errorf("ConsumeSubstraitPlan error = %v, shouldError = %v", err, test.shouldError)
+				return
+			}
+
+			if !test.shouldError && emitter != nil {
+				rb, err := emitter.emitOperator.Next(5)
+				if err != nil {
+					t.Errorf("Next() error = %v", err)
+					return
+				}
+				if rb != nil {
+					t.Logf("[%s - %s]\n%s\n", test.sqlEquiv, test.name, rb.PrettyPrint())
+				}
+			}
+		})
+	}
+}
+
+// TestSubstraitFilesMedium tests reading and executing medium-complexity Substrait plans from JSON files
+func TestSubstraitFilesMedium(t *testing.T) {
+	basePath := filepath.Join("..", "..", "test_data", "substrait_plans", "medium")
+
+	mediumFileTests := []FileIntegrationTest{
 		/*{
 			name:        "mid_01_filter_project_sort.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_01_filter_project_sort.json"),
-			sqlEquiv:    "SELECT col1, col2 FROM source WHERE col3 > 5 ORDER BY col1",
+			sqlEquiv:    "tbd",
 		},
 		{
 			name:        "mid_02_group_by_aggregate.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_02_group_by_aggregate.json"),
-			sqlEquiv:    "SELECT col1, COUNT(*), SUM(col2) FROM source GROUP BY col1",
+			sqlEquiv:    "tbd",
 		},
-		{
+		*/{
 			name:        "mid_03_join_filter.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_03_join_filter.json"),
-			sqlEquiv:    "SELECT * FROM table1 JOIN table2 ON table1.id = table2.id WHERE condition",
+			sqlEquiv:    "tbd",
 		},
-		{
+		/*{
 			name:        "mid_04_join_sort_limit.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_04_join_sort_limit.json"),
-			sqlEquiv:    "SELECT * FROM table1 JOIN table2 ON table1.id = table2.id ORDER BY col LIMIT 50",
+			sqlEquiv:    "tbd",
 		},*/
 	}
 
@@ -1251,68 +1323,6 @@ func TestSubstraitFilesBasic(t *testing.T) {
 	}
 }
 
-// TestSubstraitFilesMedium tests reading and executing medium-complexity Substrait plans from JSON files
-/*
-func TestSubstraitFilesMedium(t *testing.T) {
-	basePath := filepath.Join("..", "..", "test_data", "substrait_plans", "medium")
-
-	mediumFileTests := []FileIntegrationTest{
-		{
-			name:        "mid_01_filter_project_sort.json",
-			shouldError: false,
-			filePath:    filepath.Join(basePath, "mid_01_filter_project_sort.json"),
-			sqlEquiv:    "SELECT col1, col2 FROM source WHERE col3 > 5 ORDER BY col1",
-		},
-		{
-			name:        "mid_02_group_by_aggregate.json",
-			shouldError: false,
-			filePath:    filepath.Join(basePath, "mid_02_group_by_aggregate.json"),
-			sqlEquiv:    "SELECT col1, COUNT(*), SUM(col2) FROM source GROUP BY col1",
-		},
-		{
-			name:        "mid_03_join_filter.json",
-			shouldError: false,
-			filePath:    filepath.Join(basePath, "mid_03_join_filter.json"),
-			sqlEquiv:    "SELECT * FROM table1 JOIN table2 ON table1.id = table2.id WHERE condition",
-		},
-		{
-			name:        "mid_04_join_sort_limit.json",
-			shouldError: false,
-			filePath:    filepath.Join(basePath, "mid_04_join_sort_limit.json"),
-			sqlEquiv:    "SELECT * FROM table1 JOIN table2 ON table1.id = table2.id ORDER BY col LIMIT 50",
-		},
-	}
-
-	for _, test := range mediumFileTests {
-		t.Run(test.name, func(t *testing.T) {
-			file, err := os.Open(test.filePath)
-			if err != nil {
-				t.Logf("Skipping %s: file not found err :%v \n", test.name, err)
-				return
-			}
-			defer file.Close()
-
-			emitter, err := ConsumeSubstraitPlan(file)
-
-			if (err != nil) != test.shouldError {
-				t.Errorf("ConsumeSubstraitPlan error = %v, shouldError = %v", err, test.shouldError)
-				return
-			}
-
-			if !test.shouldError && emitter != nil {
-				rb, err := emitter.emitOperator.Next(5)
-				if err != nil {
-					t.Errorf("Next() error = %v", err)
-					return
-				}
-				if rb != nil {
-					t.Logf("[%s - %s]\n%s\n", test.sqlEquiv, test.name, rb.PrettyPrint())
-				}
-			}
-		})
-	}
-}
-*/
 // ConsumeSubstraitPlan reads a Substrait plan from an io.Reader and returns an Emitter
 func ConsumeSubstraitPlan(reader io.Reader) (*Emiter, error) {
 	// Read the JSON from the reader

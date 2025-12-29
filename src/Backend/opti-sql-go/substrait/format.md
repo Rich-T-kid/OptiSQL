@@ -12,7 +12,6 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
   "Source": {
       "file-name": "link-to-s3",
       "local": false
-
   }
 }
 # file ext must end in .csv or .parquet

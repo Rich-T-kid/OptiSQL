@@ -298,18 +298,32 @@ func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec,
 		return nil, err
 	}
 	var expres []Expr.Expression
-	exprsVal, ok := projectOBJ["expressions"].([]map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("expressions field has invalid type, expected []map[string]any")
-	}
-
-	for i := range exprsVal {
-		expr := exprsVal[i]
-		e, err := parseExpression(expr)
-		if err != nil {
-			return nil, err
+	switch exprs := projectOBJ["expressions"].(type) {
+	case []any:
+		for i, raw := range exprs {
+			m, ok := raw.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("expressions[%d] invalid type, expected object but got %T", i, raw)
+			}
+			e, err := parseExpression(m)
+			if err != nil {
+				return nil, err
+			}
+			expres = append(expres, e)
 		}
-		expres = append(expres, e)
+		// (tests)
+	case []map[string]any:
+		for i, m := range exprs {
+			e, err := parseExpression(m)
+			if err != nil {
+				return nil, err
+			}
+			expres = append(expres, e)
+			_ = i
+		}
+
+	default:
+		return nil, fmt.Errorf("expressions field has invalid type, expected array but got %T", projectOBJ["expressions"])
 	}
 	if len(expres) == 0 {
 		return nil, fmt.Errorf("project operator needs at least one expressions")
@@ -359,9 +373,25 @@ func parseSort(sortOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
 	if err != nil {
 		return nil, err
 	}
-	byField, ok := sortOBJ["by"].([]map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("Sort::by field is malformed, should be an array of objects")
+	var byField []map[string]any
+
+	switch v := sortOBJ["by"].(type) {
+	case []any:
+		byField = make([]map[string]any, 0, len(v))
+		for i, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("Sort::by[%d] is malformed, expected object but got %T", i, item)
+			}
+			byField = append(byField, m)
+		}
+
+	case []map[string]any:
+		// Go-literal tests may already have the correct type
+		byField = v
+
+	default:
+		return nil, fmt.Errorf("Sort::by field is malformed, should be an array of objects, got %T", sortOBJ["by"])
 	}
 	sortKeys, err := parseBy(byField)
 	if err != nil {
@@ -383,18 +413,31 @@ func parseDistinct(distinctOBJ jsonOBJ, plan *planMetaData) (*filter.DistinctExe
 		return nil, err
 	}
 	var expres []Expr.Expression
-	exprsVal, ok := distinctOBJ["expressions"].([]map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("expressions field has invalid type, expected []map[string]any")
-	}
-
-	for i := range exprsVal {
-		expr := exprsVal[i]
-		e, err := parseExpression(expr)
-		if err != nil {
-			return nil, err
+	switch exprs := distinctOBJ["expressions"].(type) {
+	case []any:
+		for i, raw := range exprs {
+			m, ok := raw.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("expressions[%d] invalid type, expected object but got %T", i, raw)
+			}
+			e, err := parseExpression(m)
+			if err != nil {
+				return nil, err
+			}
+			expres = append(expres, e)
 		}
-		expres = append(expres, e)
+
+	case []map[string]any:
+		for i, m := range exprs {
+			e, err := parseExpression(m)
+			if err != nil {
+				return nil, err
+			}
+			expres = append(expres, e)
+			_ = i
+		}
+	default:
+		return nil, fmt.Errorf("expressions field has invalid type, expected array but got %T", distinctOBJ["expressions"])
 	}
 	if len(expres) == 0 {
 		return nil, fmt.Errorf("distinct operator needs at least one expressions")
@@ -418,7 +461,13 @@ func parseLimit(limitOBJ jsonOBJ, plan *planMetaData) (*filter.LimitExec, error)
 	}
 	limit, ok := limitOBJ["limit"].(int)
 	if !ok {
-		return nil, fmt.Errorf("limit field is not the correct type")
+		// try to parse as float
+		l, ok1 := limitOBJ["limit"].(float64)
+		if !ok1 {
+			return nil, fmt.Errorf("limit field is not the correct type: true Type %T", limitOBJ["limit"])
+		}
+		//workeds so cast to int
+		limit = int(l)
 	}
 	// must be a valid uint16 value 1-2^16
 	if limit <= 0 || limit > math.MaxUint16 {
@@ -447,7 +496,25 @@ func parseSingleAggr(aggrOBJ jsonOBJ, plan *planMetaData) (*aggr.AggrExec, error
 	if err != nil {
 		return nil, err
 	}
-	globalAggrs, err := generateAggrs(aggrOBJ["aggrs"].([]map[string]any))
+	var res []map[string]any
+
+	switch agVal := aggrOBJ["aggrs"].(type) {
+	case []any:
+		res = make([]map[string]any, 0, len(agVal))
+		for i, item := range agVal {
+			v, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("aggrs[%d] malformed, expected object but got %T", i, item)
+			}
+			res = append(res, v)
+		}
+	case []map[string]any:
+		res = agVal
+
+	default:
+		return nil, fmt.Errorf("aggrs malformed, should be an array of aggregations: got %T", aggrOBJ["aggrs"])
+	}
+	globalAggrs, err := generateAggrs(res)
 	if err != nil {
 		return nil, err
 	}
@@ -471,22 +538,55 @@ func parseGroupBy(groupbyOBJ jsonOBJ, plan *planMetaData) (*aggr.GroupByExec, er
 		return nil, err
 	}
 	var groupByStatments []Expr.Expression
-	group_by, ok := groupbyOBJ["group_by"].([]map[string]any) // array of expressions
-	if !ok {
-		return nil, fmt.Errorf("group by statments are malformed, should be an array of expressions")
-	}
-	for _, gb := range group_by {
-		e, err := parseExpression(gb)
-		if err != nil {
-			return nil, err
+
+	// ---- group_by: accept []any (json) OR []map[string]any (go literals)
+	switch gbVal := groupbyOBJ["group_by"].(type) {
+	case []any:
+		for i, gb := range gbVal {
+			m, ok := gb.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("group_by[%d] malformed, expected object but got %T", i, gb)
+			}
+			e, err := parseExpression(m)
+			if err != nil {
+				return nil, err
+			}
+			groupByStatments = append(groupByStatments, e)
 		}
-		groupByStatments = append(groupByStatments, e)
+
+	case []map[string]any:
+		for i, m := range gbVal {
+			e, err := parseExpression(m)
+			if err != nil {
+				return nil, err
+			}
+			groupByStatments = append(groupByStatments, e)
+			_ = i
+		}
+
+	default:
+		return nil, fmt.Errorf("group by statements are malformed, should be an array of expressions: got %T", groupbyOBJ["group_by"])
 	}
-	rawAggrs, ok := groupbyOBJ["aggrs"].([]map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("aggrs malformed, should be an array of aggregations")
+	// ---- aggrs: accept []any (json) OR []map[string]any (go literals)
+	var res []map[string]any
+
+	switch agVal := groupbyOBJ["aggrs"].(type) {
+	case []any:
+		res = make([]map[string]any, 0, len(agVal))
+		for i, item := range agVal {
+			v, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("aggrs[%d] malformed, expected object but got %T", i, item)
+			}
+			res = append(res, v)
+		}
+	case []map[string]any:
+		res = agVal
+
+	default:
+		return nil, fmt.Errorf("aggrs malformed, should be an array of aggregations: got %T", groupbyOBJ["aggrs"])
 	}
-	aggrs, err := generateAggrs(rawAggrs)
+	aggrs, err := generateAggrs(res)
 	if err != nil {
 		return nil, err
 	}
