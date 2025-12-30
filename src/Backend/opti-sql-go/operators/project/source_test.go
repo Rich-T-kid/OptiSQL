@@ -303,3 +303,12 @@ func TestS3Source(t *testing.T) {
 		t.Logf("read %d bytes from s3 object stream: %s\n", n, string(buf[:n]))
 	})
 }
+
+func TestUploadS3(t *testing.T) {
+	content := []byte("name,id,age,girth\nrich,1,32,9.32")
+	fName := "upload-test_1.csv"
+	err := UploadResults(fName, content)
+	if err != nil {
+		t.Errorf("test failed this error %v", err)
+	}
+}

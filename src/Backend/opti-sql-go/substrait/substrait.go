@@ -2,6 +2,7 @@ package substrait
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -16,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
+	"github.com/apache/arrow/go/v17/arrow/array"
+	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
 var (
@@ -42,6 +45,39 @@ type Emiter struct {
 	emitOperator operators.Operator
 }
 
+func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
+	var results *operators.RecordBatch
+	mem := memory.NewGoAllocator()
+	for {
+		intermediate, err := e.emitOperator.Next(math.MaxInt16)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+		// first iteration set results to the intermediate results
+		if results == nil {
+			results = intermediate
+			continue
+		}
+		// otherwise just append for each idx
+		for i := range intermediate.Columns {
+			oldArr := results.Columns[i]
+			newArr := intermediate.Columns[i]
+			joinArr, err := array.Concatenate([]arrow.Array{oldArr, newArr}, mem)
+			if err != nil {
+				return nil, err
+			}
+			results.Columns[i] = joinArr
+		}
+		results.RowCount += intermediate.RowCount
+
+	}
+	_ = e.emitOperator.Close() // ! make sure each operator propogates this down
+	return results, nil
+}
+
 // post-order: children first, then your name.
 // NOTE: This assumes every operator you care about has exactly ONE input child in a field named `Input`
 // (Join is the common exception: Left/Right).
@@ -51,7 +87,7 @@ type planMetaData struct {
 	localFileName string // check if empty before deleting the file
 }
 
-func NewPlanMetaData(id string) *planMetaData {
+func newPlanMetaData(id string) *planMetaData {
 	return &planMetaData{id: id}
 
 }

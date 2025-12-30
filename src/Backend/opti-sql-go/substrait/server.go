@@ -2,12 +2,16 @@ package substrait
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net"
 	"opti-sql-go/config"
+	"opti-sql-go/operators/project"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"google.golang.org/grpc"
@@ -27,10 +31,62 @@ func newSubstraitServer(l *net.Listener) *SubstraitServer {
 
 // ExecuteQuery implements the gRPC service method
 func (s *SubstraitServer) ExecuteQuery(ctx context.Context, req *QueryExecutionRequest) (*QueryExecutionResponse, error) {
-	fmt.Printf("Received query request: logical_plan:%v\n sql:%v\n id:%v\n", req.LogicalPlan, req.SqlStatement, req.Id)
+	decodedPlan, err := base64.StdEncoding.DecodeString(req.LogicalPlan)
+	if err != nil {
+		return nil, fmt.Errorf("failed to base64 decode logical plan: %w", err)
+	}
+	fmt.Printf("Received query request: logical_plan:%s\n sql:%v\n id:%v\n", decodedPlan, req.SqlStatement, req.Id)
+	planM := newPlanMetaData(req.Id)
+	source := strings.NewReader(string(decodedPlan))
+	results, err := consumePlan(source, planM)
+	if err != nil {
+		return &QueryExecutionResponse{
+			S3ResultLink: "NAN",
+			ErrorType: &ErrorDetails{
+				ErrorType: ReturnTypes_PARSE_ERROR,
+				Message:   err.Error(),
+			},
+		}, nil
+	}
+	rc, err := results.consumeAll()
+	if err != nil {
+		return &QueryExecutionResponse{
+			S3ResultLink: "NAN",
+			ErrorType: &ErrorDetails{
+				ErrorType: ReturnTypes_EXECUTION_ERROR,
+				Message:   err.Error(),
+			},
+		}, nil
+
+	}
+	csv, err := rc.ToCSV()
+	if err != nil {
+		return &QueryExecutionResponse{
+			S3ResultLink: "NAN",
+			ErrorType: &ErrorDetails{
+				ErrorType: ReturnTypes_UPLOAD_ERROR,
+				Message:   err.Error(),
+			},
+		}, nil
+
+	}
+	// include random number for the sake of avoiding conflicts, should resolve this at the
+	// logical processing step but for now this works
+	fName := fmt.Sprintf("%s-%s-%d", req.SqlStatement, req.Id, rand.IntN(1000))
+	if err = project.UploadResults(fName, csv); err != nil {
+		return &QueryExecutionResponse{
+			S3ResultLink: "NAN",
+			ErrorType: &ErrorDetails{
+				ErrorType: ReturnTypes_UPLOAD_ERROR,
+				Message:   err.Error(),
+			},
+		}, nil
+
+	}
+
 	// Placeholder response
 	return &QueryExecutionResponse{
-		S3ResultLink: "",
+		S3ResultLink: fName,
 		ErrorType: &ErrorDetails{
 			ErrorType: ReturnTypes_SUCCESS,
 			Message:   "Query executed successfully",

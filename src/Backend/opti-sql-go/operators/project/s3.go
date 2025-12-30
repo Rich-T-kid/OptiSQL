@@ -1,6 +1,7 @@
 package project
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"opti-sql-go/config"
@@ -102,4 +103,26 @@ func (n *NetworkResource) DownloadLocally(scramble string) (*os.File, error) {
 	}
 
 	return f, nil
+}
+
+type NetworkUplodaer struct {
+	bucket string
+	key    string
+}
+
+func UploadResults(fileName string, content []byte) error {
+
+	accessKey := secretes.AccessKey
+	secretKey := secretes.SecretKey
+	endpoint := secretes.EndpointURL
+	bucket := secretes.BucketName
+	useSSL := true
+
+	client, err := minio.New(endpoint, accessKey, secretKey, useSSL)
+	if err != nil {
+		return err
+	}
+	_, err = client.PutObject(bucket, fileName, bytes.NewReader(content), int64(len(content)), minio.PutObjectOptions{})
+	return err
+
 }

@@ -184,7 +184,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range filterTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if (err != nil) != test.shouldError {
@@ -306,7 +306,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range projectTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if (err != nil) != test.shouldError {
@@ -432,7 +432,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range sortTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if (err != nil) != test.shouldError {
@@ -551,7 +551,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range distinctTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if (err != nil) != test.shouldError {
@@ -646,7 +646,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range limitTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if (err != nil) != test.shouldError {
@@ -816,7 +816,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range groupByTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if test.shouldError {
@@ -966,7 +966,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range aggregateTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if test.shouldError {
@@ -1158,7 +1158,7 @@ func TestOperatorsIntegration(t *testing.T) {
 
 		for _, test := range joinTests {
 			t.Run(test.sqlEquiv, func(t *testing.T) {
-				planMetaData := NewPlanMetaData(test.sqlEquiv)
+				planMetaData := newPlanMetaData(test.sqlEquiv)
 				emitter, err := buildTree(test.logicalPlan, planMetaData)
 
 				if test.shouldError {
@@ -1360,7 +1360,7 @@ func ConsumeSubstraitPlan(reader io.Reader) (*Emiter, error) {
 		break
 	}
 
-	planMetaData := NewPlanMetaData(planID)
+	planMetaData := newPlanMetaData(planID)
 
 	// Build the tree starting from the Emit operator
 	emitter, err := buildTree(emitObj, planMetaData)

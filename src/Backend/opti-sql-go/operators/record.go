@@ -1,7 +1,10 @@
 package operators
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -375,6 +378,64 @@ func (rb *RecordBatch) PrettyPrint() string {
 	b.WriteString(border)
 
 	return b.String()
+}
+func (rb *RecordBatch) ToCSV() ([]byte, error) {
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+
+	// 1. Write header
+	headers := make([]string, len(rb.Schema.Fields()))
+	for i, field := range rb.Schema.Fields() {
+		headers[i] = field.Name
+	}
+	err := w.Write(headers)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Write rows
+	for row := 0; row < int(rb.RowCount); row++ {
+		record := make([]string, len(rb.Columns))
+
+		for colIdx, col := range rb.Columns {
+			if col.IsNull(row) {
+				record[colIdx] = ""
+				continue
+			}
+
+			switch arr := col.(type) {
+			case *array.String:
+				record[colIdx] = arr.Value(row)
+
+			case *array.Int64:
+				record[colIdx] = strconv.FormatInt(arr.Value(row), 10)
+
+			case *array.Int32:
+				record[colIdx] = strconv.FormatInt(int64(arr.Value(row)), 10)
+
+			case *array.Float64:
+				record[colIdx] = strconv.FormatFloat(arr.Value(row), 'f', -1, 64)
+
+			case *array.Float32:
+				record[colIdx] = strconv.FormatFloat(float64(arr.Value(row)), 'f', -1, 32)
+
+			case *array.Boolean:
+				record[colIdx] = strconv.FormatBool(arr.Value(row))
+
+			default:
+				// Fallback — avoid panic, but make debugging obvious
+				record[colIdx] = fmt.Sprintf("<unsupported %T>", col)
+			}
+		}
+
+		if err = w.Write(record); err != nil {
+			return nil, err
+		}
+
+	}
+
+	w.Flush()
+	return buf.Bytes(), nil
 }
 
 // -------------------------------

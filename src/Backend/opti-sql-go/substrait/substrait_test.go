@@ -141,7 +141,7 @@ func TestSubstraitSourceParse(t *testing.T) {
 					"local":     tt.local,
 				}
 
-				op, err := parseSource(sourceObj, NewPlanMetaData(id))
+				op, err := parseSource(sourceObj, newPlanMetaData(id))
 				if (err != nil) != tt.wantError {
 					t.Errorf("parseSource() error = %v, wantError %v", err, tt.wantError)
 					return
@@ -906,7 +906,7 @@ func TestSubstraitProjectParse(t *testing.T) {
 	projectTestID := "project parse test"
 
 	t.Run("basic project operations", func(t *testing.T) {
-		lpMetaData := NewPlanMetaData(projectTestID)
+		lpMetaData := newPlanMetaData(projectTestID)
 
 		tests := []struct {
 			id          int
@@ -975,7 +975,7 @@ func TestSubstraitProjectParse(t *testing.T) {
 	})
 
 	t.Run("parsing alias in project", func(t *testing.T) {
-		lpMetaData := NewPlanMetaData(projectTestID)
+		lpMetaData := newPlanMetaData(projectTestID)
 
 		tests := []struct {
 			testName    string
@@ -1104,7 +1104,7 @@ func TestFilterParse(t *testing.T) {
 
 	t.Run("filter with source input", func(t *testing.T) {
 		filterTestID := "filter with source test"
-		lpMetaData := NewPlanMetaData(filterTestID)
+		lpMetaData := newPlanMetaData(filterTestID)
 
 		tests := []struct {
 			id          int
@@ -1182,7 +1182,7 @@ func TestFilterParse(t *testing.T) {
 
 	t.Run("filter with project input", func(t *testing.T) {
 		filterTestID := "filter with project test"
-		lpMetaData := NewPlanMetaData(filterTestID)
+		lpMetaData := newPlanMetaData(filterTestID)
 
 		tests := []struct {
 			id          int
@@ -1320,7 +1320,7 @@ func TestDistinctParse(t *testing.T) {
 	}
 
 	distinctTestID := "distinct test"
-	lpMetaData := NewPlanMetaData(distinctTestID)
+	lpMetaData := newPlanMetaData(distinctTestID)
 
 	tests := []struct {
 		id          int
@@ -1449,7 +1449,7 @@ func TestLimitParse(t *testing.T) {
 	}
 
 	limitTestID := "limit test"
-	lpMetaData := NewPlanMetaData(limitTestID)
+	lpMetaData := newPlanMetaData(limitTestID)
 
 	tests := []struct {
 		id            int
@@ -1585,7 +1585,7 @@ func TestSortParse(t *testing.T) {
 	}
 
 	sortTestID := "sort test"
-	lpMetaData := NewPlanMetaData(sortTestID)
+	lpMetaData := newPlanMetaData(sortTestID)
 
 	tests := []struct {
 		id          int
@@ -1755,7 +1755,7 @@ func TestAggregateParse(t *testing.T) {
 	}
 
 	aggregateTestID := "aggregate test"
-	lpMetaData := NewPlanMetaData(aggregateTestID)
+	lpMetaData := newPlanMetaData(aggregateTestID)
 
 	tests := []struct {
 		id          int
@@ -1968,7 +1968,7 @@ func TestHavingParse(t *testing.T) {
 	}
 
 	havingTestID := "having test"
-	lpMetaData := NewPlanMetaData(havingTestID)
+	lpMetaData := newPlanMetaData(havingTestID)
 
 	tests := []struct {
 		testName    string
@@ -2134,7 +2134,7 @@ func TestGroupByParse(t *testing.T) {
 	}
 
 	groupByTestID := "group by test"
-	lpMetaData := NewPlanMetaData(groupByTestID)
+	lpMetaData := newPlanMetaData(groupByTestID)
 
 	tests := []struct {
 		id          int
@@ -2385,7 +2385,7 @@ func TestJoinParse(t *testing.T) {
 	}
 
 	joinTestID := "join test"
-	lpMetaData := NewPlanMetaData(joinTestID)
+	lpMetaData := newPlanMetaData(joinTestID)
 
 	tests := []struct {
 		id          int
@@ -2690,7 +2690,7 @@ func TestJoinParse(t *testing.T) {
 func TestSourceParse(t *testing.T) {
 	t.Run("source with local CSV", func(t *testing.T) {
 		sourceTestID := "source local csv test"
-		lpMetaData := NewPlanMetaData(sourceTestID)
+		lpMetaData := newPlanMetaData(sourceTestID)
 
 		tests := []struct {
 			testName    string
@@ -2746,7 +2746,7 @@ func TestSourceParse(t *testing.T) {
 
 	t.Run("source with remote files", func(t *testing.T) {
 		sourceTestID := "source remote test"
-		lpMetaData := NewPlanMetaData(sourceTestID)
+		lpMetaData := newPlanMetaData(sourceTestID)
 
 		tests := []struct {
 			testName    string
@@ -2977,7 +2977,7 @@ func TestConsumePlan(t *testing.T) {
 				t.Logf("Skipping %s: file not found err :%v \n", test.name, err)
 				return
 			}
-			results, err := consumePlan(file, NewPlanMetaData("Test trial"))
+			results, err := consumePlan(file, newPlanMetaData("Test trial"))
 			if err != nil {
 				t.Errorf("%s failed with unexpected error %v\n", test.name, err)
 			}
