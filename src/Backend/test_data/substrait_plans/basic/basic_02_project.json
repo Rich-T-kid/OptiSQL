@@ -1,0 +1,29 @@
+{
+    "Emit": 
+    {
+        "Operator": "Project",
+        "Project": 
+        {
+            "input": 
+            {
+                "Operator": "Source",
+                "Source": 
+                {
+                    "file-name": "user_test_data.csv",
+                    "local": false
+                }
+            },
+            "expressions": 
+            [
+                {
+                    "expr_type": "ColumnResolve",
+                    "name": "email_address"
+                },
+                {
+                    "expr_type": "ColumnResolve",
+                    "name": "account_balance_usd"
+                }
+            ]
+        }
+    }
+}

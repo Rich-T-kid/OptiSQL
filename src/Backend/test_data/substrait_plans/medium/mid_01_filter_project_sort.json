@@ -1,0 +1,70 @@
+{
+    "Emit": 
+    {
+        "Operator": "Sort",
+        "Sort": 
+        {
+            "input": 
+            {
+                "Operator": "Project",
+                "Project": 
+                {
+                    "input": 
+                    {
+                        "Operator": "Filter",
+                        "Filter": 
+                        {
+                            "input": 
+                            {
+                                "Operator": "Source",
+                                "Source": 
+                                {
+                                    "file-name": "user_test_data.csv",
+                                    "local": false
+                                }
+                            },
+                            "expression": 
+                            {
+                                "expr_type": "BinaryExpr",
+                                "op": "GreaterThan",
+                                "left": 
+                                {
+                                    "expr_type": "ColumnResolve",
+                                    "name": "age_years"
+                                },
+                                "right": 
+                                {
+                                    "expr_type": "LiteralResolve",
+                                    "value": 25,
+                                    "lit_type": "int"
+                                }
+                            }
+                        }
+                    },
+                    "expressions": 
+                    [
+                        {
+                            "expr_type": "ColumnResolve",
+                            "name": "id"
+                        },
+                        {
+                            "expr_type": "ColumnResolve",
+                            "name": "username"
+                        }
+                    ]
+                }
+            },
+            "by": 
+            [
+                {
+                    "expr": 
+                    {
+                        "expr_type": "ColumnResolve",
+                        "name": "username"
+                    },
+                    "asc": true
+                }
+            ]
+        }
+    }
+}

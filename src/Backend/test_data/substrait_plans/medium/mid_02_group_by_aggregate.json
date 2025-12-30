@@ -1,0 +1,36 @@
+{
+    "Emit": 
+    {
+        "Operator": "GroupBy",
+        "GroupBy": 
+        {
+            "input": 
+            {
+                "Operator": "Source",
+                "Source": 
+                {
+                    "file-name": "company_test_data.csv",
+                    "local": false
+                }
+            },
+            "group_by": 
+            [
+                {
+                    "expr_type": "ColumnResolve",
+                    "name": "department_name"
+                }
+            ],
+            "aggrs": 
+            [
+                {
+                    "function": "count",
+                    "expr": 
+                    {
+                        "expr_type": "ColumnResolve",
+                        "name": "manager_name"
+                    }
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,29 @@
+{
+    "Emit": 
+    {
+        "Operator": "Sort",
+        "Sort": 
+        {
+            "input": 
+            {
+                "Operator": "Source",
+                "Source": 
+                {
+                    "file-name": "user_test_data.csv",
+                    "local": false
+                }
+            },
+            "by": 
+            [
+                {
+                    "expr": 
+                    {
+                        "expr_type": "ColumnResolve",
+                        "name": "username"
+                    },
+                    "asc": true
+                }
+            ]
+        }
+    }
+}

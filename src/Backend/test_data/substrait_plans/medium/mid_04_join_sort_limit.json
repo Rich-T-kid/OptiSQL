@@ -1,0 +1,69 @@
+{
+    "Emit": 
+    {
+        "Operator": "Limit",
+        "Limit": 
+        {
+            "input": 
+            {
+                "Operator": "Sort",
+                "Sort": 
+                {
+                    "input": 
+                    {
+                        "Operator": "Join",
+                        "Join": 
+                        {
+                            "left": 
+                            {
+                                "Operator": "Source",
+                                "Source": 
+                                {
+                                    "file-name": "user_test_data.csv",
+                                    "local": false
+                                }
+                            },
+                            "right": 
+                            {
+                                "Operator": "Source",
+                                "Source": 
+                                {
+                                    "file-name": "company_test_data.csv",
+                                    "local": false
+                                }
+                            },
+                            "join_type": "Inner",
+                            "on": 
+                            [
+                                {
+                                    "left": 
+                                    {
+                                        "expr_type": "ColumnResolve",
+                                        "name": "id"
+                                    },
+                                    "right": 
+                                    {
+                                        "expr_type": "ColumnResolve",
+                                        "name": "id"
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "by": 
+                    [
+                        {
+                            "expr": 
+                            {
+                                "expr_type": "ColumnResolve",
+                                "name": "average_session_minutes"
+                            },
+                            "asc": false
+                        }
+                    ]
+                }
+            },
+            "limit": 10320
+        }
+    }
+}

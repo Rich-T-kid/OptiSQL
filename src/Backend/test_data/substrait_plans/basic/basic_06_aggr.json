@@ -1,0 +1,37 @@
+{
+    "Emit": 
+    {
+        "Operator": "Aggregate",
+        "Aggregate": 
+        {
+            "input": 
+            {
+                "Operator": "Source",
+                "Source": 
+                {
+                    "file-name": "company_test_data.csv",
+                    "local": false
+                }
+            },
+            "aggrs": 
+            [
+                {
+                    "function": "count",
+                    "expr": 
+                    {
+                        "expr_type": "ColumnResolve",
+                        "name": "manager_name"
+                    }
+                },
+                {
+                    "function": "avg",
+                    "expr": 
+                    {
+                        "expr_type": "ColumnResolve",
+                        "name": "id"
+                    }
+                }
+            ]
+        }
+    }
+}

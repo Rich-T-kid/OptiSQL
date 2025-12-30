@@ -1,0 +1,25 @@
+{
+    "Emit": 
+    {
+        "Operator": "Distinct",
+        "Distinct": 
+        {
+            "input": 
+            {
+                "Operator": "Source",
+                "Source": 
+                {
+                    "file-name": "company_test_data.csv",
+                    "local": false
+                }
+            },
+            "expressions": 
+            [
+                {
+                    "expr_type": "ColumnResolve",
+                    "name": "department_name"
+                }
+            ]
+        }
+    }
+}

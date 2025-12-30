@@ -1,0 +1,19 @@
+{
+    "Emit": 
+    {
+        "Operator": "Limit",
+        "Limit": 
+        {
+            "input": 
+            {
+                "Operator": "Source",
+                "Source": 
+                {
+                    "file-name": "user_test_data.csv",
+                    "local": false
+                }
+            },
+            "limit": 142
+        }
+    }
+}

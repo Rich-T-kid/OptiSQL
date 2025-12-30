@@ -109,6 +109,7 @@ src/Backend/test_data/json
 !src/Backend/test_data/csv/Mental_Health_and_Social_Media_Balance_Dataset.csv
 !src/Backend/test_data/csv/intergration_test_data_1.csv
 !src/Backend/test_data/csv/intergration_test_data_2.csv
+!src/Backend/test_data/substrait_plans/**
 # allow parquet file
 !src/Backend/test_data/parquet/
 !src/Backend/test_data/parquet/capitals_clean.parquet

@@ -1,0 +1,66 @@
+{
+    "Emit": 
+    {
+        "Operator": "Filter",
+        "Filter": 
+        {
+            "input": 
+            {
+                "Operator": "Join",
+                "Join": 
+                {
+                    "left": 
+                    {
+                        "Operator": "Source",
+                        "Source": 
+                        {
+                            "file-name": "user_test_data.csv",
+                            "local": false
+                        }
+                    },
+                    "right": 
+                    {
+                        "Operator": "Source",
+                        "Source": 
+                        {
+                            "file-name": "company_test_data.csv",
+                            "local": false
+                        }
+                    },
+                    "join_type": "Inner",
+                    "on": 
+                    [
+                        {
+                            "left": 
+                            {
+                                "expr_type": "ColumnResolve",
+                                "name": "id"
+                            },
+                            "right": 
+                            {
+                                "expr_type": "ColumnResolve",
+                                "name": "id"
+                            }
+                        }
+                    ]
+                }
+            },
+            "expression": 
+            {
+                "expr_type": "BinaryExpr",
+                "op": "GreaterThan",
+                "left": 
+                {
+                    "expr_type": "ColumnResolve",
+                    "name": "account_balance_usd"
+                },
+                "right": 
+                {
+                    "expr_type": "LiteralResolve",
+                    "value": 5000,
+                    "lit_type": "float64"
+                }
+            }
+        }
+    }
+}
