@@ -169,6 +169,10 @@ func (g *GroupByExec) Close() error {
 	return g.input.Close()
 }
 
+func (g *GroupByExec) Name() string {
+	return "Group By"
+}
+
 // handles validation and building of schema for group by
 func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression, aggrExprs []AggregateFunctions) (*arrow.Schema, error) {
 

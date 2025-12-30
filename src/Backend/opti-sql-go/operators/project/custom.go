@@ -138,6 +138,9 @@ func (ms *InMemorySource) Close() error {
 func (ms *InMemorySource) Schema() *arrow.Schema {
 	return ms.schema
 }
+func (ms *InMemorySource) Name() string {
+	return "In Memory Source"
+}
 func unpackColumn(name string, col any) (arrow.Field, arrow.Array, error) {
 	// need to not only build the array; but also need the schema
 	var field arrow.Field

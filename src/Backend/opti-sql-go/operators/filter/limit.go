@@ -78,6 +78,9 @@ func (l *LimitExec) Schema() *arrow.Schema {
 func (l *LimitExec) Close() error {
 	return l.input.Close()
 }
+func (l *LimitExec) Name() string {
+	return "Limit"
+}
 
 type DistinctExec struct {
 	input               operators.Operator
@@ -208,6 +211,9 @@ func (d *DistinctExec) Schema() *arrow.Schema { return d.schema }
 func (d *DistinctExec) Close() error {
 	operators.ReleaseArrays(d.distinctValuesArray)
 	return d.input.Close()
+}
+func (d *DistinctExec) Name() string {
+	return "Distinct"
 }
 func (d *DistinctExec) consumeDistinctArrays(readSize uint64, mem memory.Allocator) ([]arrow.Array, error) {
 	ctx := context.Background()

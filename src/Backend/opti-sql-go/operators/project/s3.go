@@ -81,7 +81,7 @@ func (n *NetworkResource) Seek(offset int64, whence int) (int64, error) {
 	}
 }
 func (n *NetworkResource) DownloadLocally(scramble string) (*os.File, error) {
-	f, err := os.Create(fmt.Sprintf("%s-%s", n.key, strings.Replace(scramble, " ", "-", -1)))
+	f, err := os.Create(fmt.Sprintf("%s-%s", n.key, strings.ReplaceAll(scramble, " ", "-")))
 	if err != nil {
 		return nil, err
 	}

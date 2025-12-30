@@ -247,6 +247,9 @@ func (hj *HashJoinExec) Close() error {
 	}
 	return nil
 }
+func (hj *HashJoinExec) Name() string {
+	return "Join"
+}
 
 func consumeOperator(o operators.Operator, mem memory.Allocator) ([]arrow.Array, error) {
 

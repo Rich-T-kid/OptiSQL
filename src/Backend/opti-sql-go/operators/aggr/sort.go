@@ -159,6 +159,9 @@ func (s *SortExec) Schema() *arrow.Schema {
 func (s *SortExec) Close() error {
 	return s.input.Close()
 }
+func (s *SortExec) Name() string {
+	return "Sort"
+}
 func (s *SortExec) consumeSortedBatch(readsize uint64, mem memory.Allocator) ([]arrow.Array, error) {
 	ctx := context.Background()
 	resultColumns := make([]arrow.Array, len(s.schema.Fields()))
@@ -260,6 +263,9 @@ func (t *TopKSortExec) Schema() *arrow.Schema {
 }
 func (t *TopKSortExec) Close() error {
 	return t.input.Close()
+}
+func (t *TopKSortExec) Name() string {
+	return "Top K Exec"
 }
 
 type heapRow struct {

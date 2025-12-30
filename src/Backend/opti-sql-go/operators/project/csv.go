@@ -97,6 +97,9 @@ func (csvS *CSVSource) Close() error {
 func (csvS *CSVSource) Schema() *arrow.Schema {
 	return csvS.schema
 }
+func (csvS *CSVSource) Name() string {
+	return "CSV Source"
+}
 func (csvS *CSVSource) initBuilders() []array.Builder {
 	fields := csvS.schema.Fields()
 	builders := make([]array.Builder, len(fields))

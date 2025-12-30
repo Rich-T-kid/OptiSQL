@@ -265,6 +265,9 @@ func (a *AggrExec) Schema() *arrow.Schema {
 func (a *AggrExec) Close() error {
 	return a.input.Close()
 }
+func (a *AggrExec) Name() string {
+	return "Global Aggregate"
+}
 
 func validAggrType(aggrT AggregateFunctions, dt arrow.DataType) bool {
 	if aggrT.AggrFunc == Count {

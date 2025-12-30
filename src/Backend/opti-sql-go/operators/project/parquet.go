@@ -165,6 +165,10 @@ func (ps *ParquetSource) Schema() *arrow.Schema {
 	return ps.schema
 }
 
+func (ps *ParquetSource) Name() string {
+	return "Parquet Source"
+}
+
 // append arr2 to arr1 so (arr1 + arr2) = arr1-arr2
 func CombineArray(a1, a2 arrow.Array) arrow.Array {
 	if a1 == nil {

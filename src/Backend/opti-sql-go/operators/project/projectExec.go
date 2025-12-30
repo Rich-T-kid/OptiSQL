@@ -118,6 +118,9 @@ func (p *ProjectExec) Close() error {
 func (p *ProjectExec) Schema() *arrow.Schema {
 	return &p.outputschema
 }
+func (p *ProjectExec) Name() string {
+	return "Project"
+}
 
 // handle keeping only the request columns but make sure the schema and columns are also aligned
 // returns error if a column doesnt exist

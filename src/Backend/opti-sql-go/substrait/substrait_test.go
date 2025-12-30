@@ -7,6 +7,7 @@ import (
 	"net"
 	"opti-sql-go/Expr"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,6 @@ import (
 )
 
 func testCleanUp() {
-	time.Sleep(5 * time.Second)
 
 	// Get current directory
 	curDir, err := os.Getwd()
@@ -1093,7 +1093,13 @@ func TestFilterParse(t *testing.T) {
 
 	// Cleanup functions for source files
 	cleanupSource1 := func() {
-		os.Remove("country_full.csv-filter-with-source-test")
+		defer func() {
+			fname := "country_full.csv-filter-with-source-test"
+			if err := os.Remove(fname); err != nil {
+				t.Logf("error removing file (%s) file:\t%v\n", fname, err)
+			}
+		}()
+
 	}
 
 	t.Run("filter with source input", func(t *testing.T) {
@@ -1305,7 +1311,12 @@ func TestDistinctParse(t *testing.T) {
 
 	// Cleanup functions for source files
 	cleanupSource1 := func() {
-		os.Remove("country_full.csv-distinct-test")
+		defer func() {
+			fname := "country_full.csv-distinct-test.csv"
+			if err := os.Remove(fname); err != nil {
+				t.Logf("error removing file (%s) file:\t%v\n", fname, err)
+			}
+		}()
 	}
 
 	distinctTestID := "distinct test"
@@ -1515,7 +1526,12 @@ func TestLimitParse(t *testing.T) {
 	}
 
 	cleanupSource1 := func() {
-		os.Remove("country_full.csv-limit-test")
+		defer func() {
+			fname := "country_full.csv-limit-test.csv"
+			if err := os.Remove(fname); err != nil {
+				t.Logf("error removing file (%s) file:\t%v\n", fname, err)
+			}
+		}()
 	}
 
 	for _, tt := range tests {
@@ -1664,7 +1680,10 @@ func TestSortParse(t *testing.T) {
 	}
 
 	cleanupSource1 := func() {
-		os.Remove("country_full.csv-sort-test")
+		err := os.Remove("country_full.csv-sort-test")
+		if err != nil {
+			t.Logf("error closing file: %v\n", err)
+		}
 	}
 
 	for _, tt := range tests {
@@ -1897,7 +1916,10 @@ func TestAggregateParse(t *testing.T) {
 	}
 
 	cleanupSource1 := func() {
-		os.Remove("country_full.csv-aggregate-test")
+		err := os.Remove("country_full.csv-aggregate-test")
+		if err != nil {
+			t.Logf("error closing file: %v\n", err)
+		}
 	}
 
 	for _, tt := range tests {
@@ -2312,7 +2334,9 @@ func TestGroupByParse(t *testing.T) {
 	}
 
 	cleanupSource1 := func() {
-		os.Remove("country_full.csv-group-by-test")
+		if err := os.Remove("country_full.csv-group-by-test"); err != nil {
+			t.Logf("error occured closing file %v", err)
+		}
 	}
 
 	for _, tt := range tests {
@@ -2643,21 +2667,8 @@ func TestJoinParse(t *testing.T) {
 		},
 	}
 
-	cleanupSource1 := func() {
-		os.Remove("user_test_data.csv-join-test")
-	}
-	cleanupSource2 := func() {
-		os.Remove("company_test_data.csv-join-test")
-	}
-
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
-			defer func() {
-				if tt.id == 3 {
-					cleanupSource1()
-					cleanupSource2()
-				}
-			}()
 			join, err := parseJoin(tt.logicalPlan, lpMetaData)
 			if tt.expectError {
 				if err == nil {
@@ -2949,7 +2960,39 @@ func TestCorrectFieldTypes(t *testing.T) {
 		})
 	}
 }
+func TestConsumePlan(t *testing.T) {
+
+	basePath := filepath.Join("..", "..", "test_data", "substrait_plans", "medium")
+	example := []FileIntegrationTest{
+		{
+			name:     "mid_01_filter_project_sort.json",
+			filePath: filepath.Join(basePath, "mid_01_filter_project_sort.json"),
+			sqlEquiv: "select id , username from user_data where age_years > 25 order by username asc",
+		},
+	}
+	for _, test := range example {
+		t.Run(test.name, func(t *testing.T) {
+			file, err := os.Open(test.filePath)
+			if err != nil {
+				t.Logf("Skipping %s: file not found err :%v \n", test.name, err)
+				return
+			}
+			results, err := consumePlan(file, NewPlanMetaData("Test trial"))
+			if err != nil {
+				t.Errorf("%s failed with unexpected error %v\n", test.name, err)
+			}
+			rc, err := results.emitOperator.Next(50)
+			if err != nil {
+				t.Errorf("%s failed with unexpected error %v\n", test.name, err)
+
+			}
+			t.Logf("record batch of %s \n%v\n", test.sqlEquiv, rc.PrettyPrint())
+
+		})
+	}
+}
 
 func TestCleanU(t *testing.T) {
+	time.Sleep(time.Second * 3)
 	testCleanUp()
 }

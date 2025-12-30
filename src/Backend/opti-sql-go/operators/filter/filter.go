@@ -119,6 +119,9 @@ func (f *FilterExec) Schema() *arrow.Schema {
 func (f *FilterExec) Close() error {
 	return f.input.Close()
 }
+func (f *FilterExec) Name() string {
+	return "Filter"
+}
 
 func ApplyBooleanMask(col arrow.Array, mask *array.Boolean) (arrow.Array, error) {
 	datum, err := compute.Filter(

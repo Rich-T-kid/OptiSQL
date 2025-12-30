@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// ! find . -type f -name '*\.csv*' -delete
+//! to delete .csv files generated -> find . -type f -name '*\.csv*' -delete
 
 // IntegrationTest defines a single integration test case using buildTree
 type IntegrationTest struct {
@@ -1034,89 +1034,89 @@ func TestOperatorsIntegration(t *testing.T) {
 						},
 					},
 				},
-			}, /*
-					{
-						name:        "Join with Filter on users.age_years > 25",
-						shouldError: false,
-						sqlEquiv:    "SELECT * FROM users JOIN companies ON users.id = companies.id WHERE age_years > 25",
-						logicalPlan: map[string]any{
-							"Operator": "Filter",
-							"Filter": map[string]any{
-								"input": map[string]any{
-									"Operator": "Join",
-									"Join": map[string]any{
-										"left":      leftSource,
-										"right":     rightSource,
-										"join_type": "Inner",
-										"on": []map[string]any{
-											{
-												"left": map[string]any{
-													"expr_type": "ColumnResolve",
-													"name":      "id",
-												},
-												"right": map[string]any{
-													"expr_type": "ColumnResolve",
-													"name":      "id",
-												},
-											},
+			},
+			{
+				name:        "Join with Filter on users.age_years > 25",
+				shouldError: false,
+				sqlEquiv:    "SELECT * FROM users JOIN companies ON users.id = companies.id WHERE age_years > 25",
+				logicalPlan: map[string]any{
+					"Operator": "Filter",
+					"Filter": map[string]any{
+						"input": map[string]any{
+							"Operator": "Join",
+							"Join": map[string]any{
+								"left":      leftSource,  // user data
+								"right":     rightSource, // company data
+								"join_type": "Inner",
+								"on": []map[string]any{
+									{
+										"left": map[string]any{
+											"expr_type": "ColumnResolve",
+											"name":      "id",
 										},
-									},
-								},
-								"expression": map[string]any{
-									"expr_type": "BinaryExpr",
-									"op":        "GreaterThan",
-									"left": map[string]any{
-										"expr_type": "ColumnResolve",
-										"name":      "age_years",
-									},
-									"right": map[string]any{
-										"expr_type": "LiteralResolve",
-										"value":     25,
-										"lit_type":  "int",
-									},
-								},
-							},
-						},
-					},
-				{
-					name:        "Join with Sort on username",
-					shouldError: false,
-					sqlEquiv:    "SELECT * FROM users JOIN companies ON users.id = companies.id ORDER BY username",
-					logicalPlan: map[string]any{
-						"Operator": "Sort",
-						"Sort": map[string]any{
-							"input": map[string]any{
-								"Operator": "Join",
-								"Join": map[string]any{
-									"left":      leftSource,
-									"right":     rightSource,
-									"join_type": "Inner",
-									"on": []map[string]any{
-										{
-											"left": map[string]any{
-												"expr_type": "ColumnResolve",
-												"name":      "id",
-											},
-											"right": map[string]any{
-												"expr_type": "ColumnResolve",
-												"name":      "id",
-											},
+										"right": map[string]any{
+											"expr_type": "ColumnResolve",
+											"name":      "id",
 										},
 									},
 								},
 							},
-							"by": []map[string]any{
-								{
-									"expr": map[string]any{
-										"expr_type": "ColumnResolve",
-										"name":      "username",
-									},
-									"asc": true,
-								},
+						},
+						"expression": map[string]any{
+							"expr_type": "BinaryExpr",
+							"op":        "GreaterThan",
+							"left": map[string]any{
+								"expr_type": "ColumnResolve",
+								"name":      "age_years",
+							},
+							"right": map[string]any{
+								"expr_type": "LiteralResolve",
+								"value":     25,
+								"lit_type":  "int",
 							},
 						},
 					},
-				},*/
+				},
+			},
+			{
+				name:        "Join with Sort on username",
+				shouldError: false,
+				sqlEquiv:    "SELECT * FROM users JOIN companies ON users.id = companies.id ORDER BY username",
+				logicalPlan: map[string]any{
+					"Operator": "Sort",
+					"Sort": map[string]any{
+						"input": map[string]any{
+							"Operator": "Join",
+							"Join": map[string]any{
+								"left":      leftSource,
+								"right":     rightSource,
+								"join_type": "Inner",
+								"on": []map[string]any{
+									{
+										"left": map[string]any{
+											"expr_type": "ColumnResolve",
+											"name":      "id",
+										},
+										"right": map[string]any{
+											"expr_type": "ColumnResolve",
+											"name":      "id",
+										},
+									},
+								},
+							},
+						},
+						"by": []map[string]any{
+							{
+								"expr": map[string]any{
+									"expr_type": "ColumnResolve",
+									"name":      "username",
+								},
+								"asc": true,
+							},
+						},
+					},
+				},
+			},
 			{
 				name:        "Join with missing left field - should fail",
 				shouldError: true,
@@ -1239,7 +1239,11 @@ func TestSubstraitFilesBasic(t *testing.T) {
 				t.Logf("Skipping %s: file not found err :%v \n", test.name, err)
 				return
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					t.Logf("error closing file:\t%v\n", err)
+				}
+			}()
 
 			emitter, err := ConsumeSubstraitPlan(file)
 
@@ -1267,7 +1271,7 @@ func TestSubstraitFilesMedium(t *testing.T) {
 	basePath := filepath.Join("..", "..", "test_data", "substrait_plans", "medium")
 
 	mediumFileTests := []FileIntegrationTest{
-		/*{
+		{
 			name:        "mid_01_filter_project_sort.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_01_filter_project_sort.json"),
@@ -1279,18 +1283,18 @@ func TestSubstraitFilesMedium(t *testing.T) {
 			filePath:    filepath.Join(basePath, "mid_02_group_by_aggregate.json"),
 			sqlEquiv:    "tbd",
 		},
-		*/{
+		{
 			name:        "mid_03_join_filter.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_03_join_filter.json"),
 			sqlEquiv:    "tbd",
 		},
-		/*{
+		{
 			name:        "mid_04_join_sort_limit.json",
 			shouldError: false,
 			filePath:    filepath.Join(basePath, "mid_04_join_sort_limit.json"),
 			sqlEquiv:    "tbd",
-		},*/
+		},
 	}
 
 	for _, test := range mediumFileTests {
@@ -1300,7 +1304,11 @@ func TestSubstraitFilesMedium(t *testing.T) {
 				t.Logf("Skipping %s: file not found err :%v \n", test.name, err)
 				return
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					t.Logf("error closing file:\t%v\n", err)
+				}
+			}()
 
 			emitter, err := ConsumeSubstraitPlan(file)
 

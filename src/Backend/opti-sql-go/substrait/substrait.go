@@ -38,27 +38,14 @@ var (
 
 type jsonOBJ = map[string]interface{}
 
-/*
-sql: select a, b from table1 order by a
-"Emit": {
-  "Sort": {
-    "input": {
-      "Project": {
-        "input": {
-          "Source": "s3://bucket/data.csv"
-        },
-        "columns": ["a", "b"],
-        "alias": ["", ""]
-      }
-    },
-    "by": [{ "column": "a" }]
-  }
-}
-*/
-// represents outer layer of substrait plan
 type Emiter struct {
 	emitOperator operators.Operator
 }
+
+// post-order: children first, then your name.
+// NOTE: This assumes every operator you care about has exactly ONE input child in a field named `Input`
+// (Join is the common exception: Left/Right).
+
 type planMetaData struct {
 	id            string
 	localFileName string // check if empty before deleting the file
@@ -179,7 +166,6 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 	return nil, ErrBuildTreeFailed("unknown", "no valid operator found in logical plan")
 }
 func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, error) {
-	fmt.Printf("sourceOBJ:\t%v\n", sourceOBJ)
 	fields := []string{"file-name", "local"}
 	err := containsFields(fields, sourceOBJ)
 	if err != nil {
@@ -279,12 +265,11 @@ func parseFilter(filterOBJ jsonOBJ, plan *planMetaData) (*filter.FilterExec, err
 	if !validExpr(expression) {
 		return nil, fmt.Errorf("%s is not a valid filter/having expression, must evaluate to boolean mask", expression)
 	}
-	fmt.Printf("input:\t%v\n", filterOBJ["input"])
-	input, err := resolveInput(filterOBJ["input"].(map[string]any), plan)
+	inp := filterOBJ["input"].(map[string]any)
+	input, err := resolveInput(inp, plan)
 	if err != nil {
 		return nil, err
 	}
-	print(1)
 	return filter.NewFilterExec(input, expression)
 }
 func parseProject(projectOBJ jsonOBJ, plan *planMetaData) (*project.ProjectExec, error) {
@@ -381,7 +366,7 @@ func parseSort(sortOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
 		for i, item := range v {
 			m, ok := item.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("Sort::by[%d] is malformed, expected object but got %T", i, item)
+				return nil, fmt.Errorf("sort::by[%d] is malformed, expected object but got %T", i, item)
 			}
 			byField = append(byField, m)
 		}
@@ -391,7 +376,7 @@ func parseSort(sortOBJ jsonOBJ, plan *planMetaData) (*aggr.SortExec, error) {
 		byField = v
 
 	default:
-		return nil, fmt.Errorf("Sort::by field is malformed, should be an array of objects, got %T", sortOBJ["by"])
+		return nil, fmt.Errorf("sort::by field is malformed, should be an array of objects, got %T", sortOBJ["by"])
 	}
 	sortKeys, err := parseBy(byField)
 	if err != nil {
@@ -656,7 +641,29 @@ func parseJoin(joinOBJ jsonOBJ, plan *planMetaData) (*join.HashJoinExec, error) 
 		}
 		return jc, nil
 	}
-	jc, err := clauseParer(joinOBJ["on"].([]map[string]any))
+	rawOn, ok := joinOBJ["on"]
+	if !ok {
+		return nil, fmt.Errorf("join::on field is missing")
+	}
+
+	var onClauses []map[string]any
+
+	switch v := rawOn.(type) {
+	case []any:
+		onClauses = make([]map[string]any, 0, len(v))
+		for i, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("join::on[%d] malformed, expected object but got %T", i, item)
+			}
+			onClauses = append(onClauses, m)
+		}
+	case []map[string]any:
+		onClauses = v
+	default:
+		return nil, fmt.Errorf("join::on field is malformed, expected array of objects, got %T", rawOn)
+	}
+	jc, err := clauseParer(onClauses)
 	if err != nil {
 		return nil, err
 	}
@@ -866,9 +873,13 @@ func resolveInput(m jsonOBJ, plan *planMetaData) (operators.Operator, error) {
 	case "sort":
 		return parseSort(newOBJ, plan)
 	case "aggregate":
+		return parseSingleAggr(newOBJ, plan)
 	case "having":
+		return parseHaving(newOBJ, plan)
 	case "join":
+		return parseJoin(newOBJ, plan)
 	case "groupby":
+		return parseGroupBy(newOBJ, plan)
 	}
 
 	return nil, nil
@@ -947,7 +958,6 @@ func matchesExpectedType(value any, expected string) bool {
 			return false
 		}
 	case "float64":
-		fmt.Printf("hit float case second\n")
 		_, ok := value.(float64)
 		return ok
 	case "object":

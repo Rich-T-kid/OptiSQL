@@ -75,3 +75,7 @@ func (h *HavingExec) Schema() *arrow.Schema {
 func (h *HavingExec) Close() error {
 	return h.input.Close()
 }
+
+func (h *HavingExec) Name() string {
+	return "Having"
+}

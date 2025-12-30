@@ -20,6 +20,7 @@ type Operator interface {
 	Schema() *arrow.Schema
 	// Call Operator.Close() after Next returns an io.EOF to clean up resources
 	Close() error
+	Name() string
 }
 type RecordBatch struct {
 	Schema   *arrow.Schema
