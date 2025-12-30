@@ -43,6 +43,7 @@ type jsonOBJ = map[string]interface{}
 
 type Emiter struct {
 	emitOperator operators.Operator
+	p            *planMetaData
 }
 
 func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
@@ -74,7 +75,13 @@ func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
 		results.RowCount += intermediate.RowCount
 
 	}
-	_ = e.emitOperator.Close() // ! make sure each operator propogates this down
+	// delete source files
+	for _, file := range e.p.localFileNames {
+		if err := os.Remove(file); err != nil {
+			return nil, err
+		}
+	}
+	_ = e.emitOperator.Close()
 	return results, nil
 }
 
@@ -83,8 +90,8 @@ func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
 // (Join is the common exception: Left/Right).
 
 type planMetaData struct {
-	id            string
-	localFileName string // check if empty before deleting the file
+	id             string
+	localFileNames []string // check if empty before deleting the file
 }
 
 func newPlanMetaData(id string) *planMetaData {
@@ -141,21 +148,21 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 			return nil, ErrBuildTreeFailed("filter", err.Error())
 		}
 		op = filterOP
-		return &Emiter{op}, nil
+		return &Emiter{op, plan}, nil
 	case "project":
 		projectOP, err := parseProject(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("project", err.Error())
 		}
 		op = projectOP
-		return &Emiter{op}, nil
+		return &Emiter{op, plan}, nil
 	case "sort":
 		sortOP, err := parseSort(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("sort", err.Error())
 		}
 		op = sortOP
-		return &Emiter{op}, nil
+		return &Emiter{op, plan}, nil
 
 	case "distinct":
 		distinctOP, err := parseDistinct(body, plan)
@@ -163,28 +170,28 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 			return nil, ErrBuildTreeFailed("distinct", err.Error())
 		}
 		op = distinctOP
-		return &Emiter{op}, nil
+		return &Emiter{op, plan}, nil
 	case "limit":
 		limitOP, err := parseLimit(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("limit", err.Error())
 		}
 		op = limitOP
-		return &Emiter{op}, nil
+		return &Emiter{op, plan}, nil
 	case "aggregate":
 		aggrOP, err := parseSingleAggr(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("single-aggr", err.Error())
 		}
 		op = aggrOP
-		return &Emiter{op}, nil
+		return &Emiter{op, plan}, nil
 	case "groupby":
 		groupByOP, err := parseGroupBy(body, plan)
 		if err != nil {
 			return nil, ErrBuildTreeFailed("group-by", err.Error())
 		}
 		op = groupByOP
-		return &Emiter{op}, err
+		return &Emiter{op, plan}, err
 
 	case "join":
 		joinOP, err := parseJoin(body, plan)
@@ -192,7 +199,7 @@ func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
 			return nil, ErrBuildTreeFailed("join", err.Error())
 		}
 		op = joinOP
-		return &Emiter{op}, err
+		return &Emiter{op, plan}, err
 
 	case "source", "expression": // invalid branch
 		//(1) Source:cannot directy return from source
@@ -242,7 +249,7 @@ func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, err
 		return nil, err
 	}
 	curDir, _ := os.Getwd()
-	plan.localFileName = fmt.Sprintf("%s/%s", curDir, localFile.Name())
+	plan.localFileNames = append(plan.localFileNames, fmt.Sprintf("%s/%s", curDir, localFile.Name()))
 	switch kind {
 	case "csv":
 		csvRootNode, err := project.NewProjectCSVLeaf(localFile)

@@ -66,9 +66,9 @@ func TestDummyInput(t *testing.T) {
 		t.Errorf("Expected non-nil Substrait server")
 	}
 	dummyRequest := &QueryExecutionRequest{
-		SqlStatement: "SELECT * FROM table",
-		LogicalPlan:  "CgJTUxIMCgpTZWxlY3QgKiBGUk9NIHRhYmxl",
-		Id:           "GenerateDTMoneyOHaasdavdasvasdvada",
+		SqlStatement: "select * from table1 , asc ",
+		LogicalPlan:  "ewogICAgIkVtaXQiOiAKICAgIHsKICAgICAgICAiT3BlcmF0b3IiOiAiU29ydCIsCiAgICAgICAgIlNvcnQiOiAKICAgICAgICB7CiAgICAgICAgICAgICJpbnB1dCI6IAogICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAiT3BlcmF0b3IiOiAiU291cmNlIiwKICAgICAgICAgICAgICAgICJTb3VyY2UiOiAKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAiZmlsZS1uYW1lIjogInVzZXJfdGVzdF9kYXRhLmNzdiIsCiAgICAgICAgICAgICAgICAgICAgImxvY2FsIjogZmFsc2UKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSwKICAgICAgICAgICAgImJ5IjogCiAgICAgICAgICAgIFsKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAiZXhwciI6IAogICAgICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAgICAgImV4cHJfdHlwZSI6ICJDb2x1bW5SZXNvbHZlIiwKICAgICAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAidXNlcm5hbWUiCiAgICAgICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgICAgICAiYXNjIjogdHJ1ZQogICAgICAgICAgICAgICAgfQogICAgICAgICAgICBdCiAgICAgICAgfQogICAgfQp9",
+		Id:           "97b61a8f-ffe1-4e4a-b6d7-73619698dc7a",
 	}
 	resp, err := ss.ExecuteQuery(context.Background(), dummyRequest)
 	if err != nil {
@@ -2969,6 +2969,16 @@ func TestConsumePlan(t *testing.T) {
 			filePath: filepath.Join(basePath, "mid_01_filter_project_sort.json"),
 			sqlEquiv: "select id , username from user_data where age_years > 25 order by username asc",
 		},
+		{
+			name:     "mid_02_filter_project_sort.json",
+			filePath: filepath.Join(basePath, "mid_02_group_by_aggregate.json"),
+			sqlEquiv: "tbd",
+		},
+		{
+			name:     "mid_03_join_filter.json",
+			filePath: filepath.Join(basePath, "mid_03_join_filter.json"),
+			sqlEquiv: "tbd",
+		},
 	}
 	for _, test := range example {
 		t.Run(test.name, func(t *testing.T) {
@@ -2981,12 +2991,23 @@ func TestConsumePlan(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s failed with unexpected error %v\n", test.name, err)
 			}
-			rc, err := results.emitOperator.Next(50)
-			if err != nil {
-				t.Errorf("%s failed with unexpected error %v\n", test.name, err)
+			/*	rc, err := results.emitOperator.Next(50)
+				if err != nil {
+					t.Errorf("%s failed with unexpected error %v\n", test.name, err)
 
+				}
+				t.Logf("record batch of %s \n%v\n", test.sqlEquiv, rc.PrettyPrint())
+			*/
+			fmt.Printf("plan: %v\n", results.p)
+			_, err = results.consumeAll()
+			if err != nil {
+				t.Errorf("test failed with error:\t %v\n", err)
 			}
-			t.Logf("record batch of %s \n%v\n", test.sqlEquiv, rc.PrettyPrint())
+			for _, f := range results.p.localFileNames {
+				if _, err := os.Open(f); !strings.Contains(err.Error(), "no such file or directory") {
+					t.Errorf("%s was found when it should have been cleaned up by consumeAll: %v", f, err)
+				}
+			}
 
 		})
 	}

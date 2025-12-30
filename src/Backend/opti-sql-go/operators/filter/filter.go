@@ -3,7 +3,6 @@ package filter
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
@@ -166,11 +165,9 @@ func validPredicates(pred Expr.Expression, schema *arrow.Schema) bool {
 		if err != nil {
 			return false
 		}
-		fmt.Printf("dt1:\t%v\ndt2:\t%v\n", dt1, dt2)
 		if !arrow.TypeEqual(dt1, dt2) {
 			return false
 		}
-		fmt.Printf("left:\t%v\nright:\t%v\n", p.Left, p.Right)
 		return validPredicates(p.Left, schema) &&
 			validPredicates(p.Right, schema)
 

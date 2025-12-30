@@ -105,11 +105,6 @@ func (n *NetworkResource) DownloadLocally(scramble string) (*os.File, error) {
 	return f, nil
 }
 
-type NetworkUplodaer struct {
-	bucket string
-	key    string
-}
-
 func UploadResults(fileName string, content []byte) error {
 
 	accessKey := secretes.AccessKey
