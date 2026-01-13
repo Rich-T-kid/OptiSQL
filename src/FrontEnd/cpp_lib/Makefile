@@ -1,104 +1,91 @@
-#
-# 'make'        build executable file 'main'
-# 'make clean'  removes all .o and executable files
-#
-
-# define the Cpp compiler to use
 CXX = clang++-20
-
-# define any compile-time flags
-CXXFLAGS	:= -std=c++23 -stdlib=libc++ -Wall -Wextra -g
-
-# define library paths in addition to /usr/lib
-#   if I wanted to include libraries not in /usr/lib I'd specify
-#   their path using -Lpath, something like:
+CXXFLAGS := -std=c++23 -stdlib=libc++ -Wall -Wextra -g
 LFLAGS = -stdlib=libc++
 
-# define output directory
-OUTPUT	:= output
+OUTPUT := output
+SRC := src
+INCLUDE := include
+LIB := lib
+TESTS := tests
 
-# define source directory
-SRC		:= src
+INCLUDES := -I$(INCLUDE) -I$(LIB)
 
-# define include directory
-INCLUDE	:= include
+MAIN_SOURCES := $(wildcard $(SRC)/*.cpp)
+MAIN_OBJECTS := $(patsubst $(SRC)/%.cpp,$(OUTPUT)/%.o,$(MAIN_SOURCES))
 
-# define lib directory
-LIB		:= lib
+LIB_SOURCES := $(filter-out $(SRC)/main.cpp $(SRC)/bindings.cpp,$(MAIN_SOURCES))
+LIB_OBJECTS := $(patsubst $(SRC)/%.cpp,$(OUTPUT)/%.o,$(LIB_SOURCES))
 
-ifeq ($(OS),Windows_NT)
-MAIN	:= main.exe
-SOURCEDIRS	:= $(SRC)
-INCLUDEDIRS	:= $(INCLUDE)
-LIBDIRS		:= $(LIB)
-FIXPATH = $(subst /,\,$1)
-RM			:= del /q /f
-MD	:= mkdir
-else
-MAIN	:= main
-SOURCEDIRS	:= $(shell find $(SRC) -type d)
-INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d)
-LIBDIRS		:= $(shell find $(LIB) -type d)
-FIXPATH = $1
-RM = rm -f
-MD	:= mkdir -p
-endif
+TEST_SOURCES := $(wildcard $(TESTS)/*.cpp)
+TEST_OBJECTS := $(patsubst $(TESTS)/%.cpp,$(OUTPUT)/%.o,$(TEST_SOURCES))
 
-# define any directories containing header files other than /usr/include
-INCLUDES	:= $(patsubst %,-I%, $(INCLUDEDIRS:%/=%))
+CATCH_OBJ := $(OUTPUT)/catch_amalgamated.o
 
-# define the C libs
-LIBS		:= $(patsubst %,-L%, $(LIBDIRS:%/=%))
+MAIN := main
+TEST_RUNNER := test_runner
 
-# define the C source files
-SOURCES		:= $(wildcard $(patsubst %,%/*.cpp, $(SOURCEDIRS)))
+PYTHON_CONFIG := python3-config
+PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
+PYTHON_LDFLAGS := $(shell $(PYTHON_CONFIG) --ldflags --embed 2>/dev/null || $(PYTHON_CONFIG) --ldflags)
+PYTHON_EXT_SUFFIX := $(shell $(PYTHON_CONFIG) --extension-suffix)
+PYTHON_MODULE := optisql_parser$(PYTHON_EXT_SUFFIX)
 
-# define the C object files
-OBJECTS		:= $(SOURCES:.cpp=.o)
+.PHONY: all clean test test-verbose run python
 
-# define the dependency output files
-DEPS		:= $(OBJECTS:.o=.d)
-
-#
-# The following part of the makefile is generic; it can be used to
-# build any executable just by changing the definitions above and by
-# deleting dependencies appended to the file from 'make depend'
-#
-
-OUTPUTMAIN	:= $(call FIXPATH,$(OUTPUT)/$(MAIN))
-
-all: $(OUTPUT) $(MAIN)
-	@echo Executing 'all' complete!
+all: $(OUTPUT) $(OUTPUT)/$(MAIN)
+	@echo "Build complete!"
 
 $(OUTPUT):
-	$(MD) $(OUTPUT)
+	mkdir -p $(OUTPUT)
 
-$(MAIN): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(OUTPUTMAIN) $(OBJECTS) $(LFLAGS) $(LIBS)
+$(OUTPUT)/$(MAIN): $(MAIN_OBJECTS) | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $^ $(LFLAGS)
 
-# include all .d files
--include $(DEPS)
+$(OUTPUT)/%.o: $(SRC)/%.cpp | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c -MMD $< -o $@
 
-# this is a suffix replacement rule for building .o's and .d's from .c's
-# it uses automatic variables $<: the name of the prerequisite of
-# the rule(a .c file) and $@: the name of the target of the rule (a .o file)
-# -MMD generates dependency output files same name as the .o file
-# (see the gnu make manual section about automatic variables)
-.cpp.o:
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c -MMD $<  -o $@
+$(OUTPUT)/%.o: $(TESTS)/%.cpp | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c -MMD $< -o $@
 
-.PHONY: clean
+$(CATCH_OBJ): $(LIB)/catch2/catch_amalgamated.cpp | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+test: $(OUTPUT)/$(TEST_RUNNER)
+	./$(OUTPUT)/$(TEST_RUNNER)
+
+test-verbose: $(OUTPUT)/$(TEST_RUNNER)
+	./$(OUTPUT)/$(TEST_RUNNER) --success
+
+$(OUTPUT)/$(TEST_RUNNER): $(LIB_OBJECTS) $(TEST_OBJECTS) $(CATCH_OBJ) | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $^ $(LFLAGS)
+
+$(OUTPUT)/bindings.o: $(SRC)/bindings.cpp | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(PYTHON_INCLUDES) -fPIC -c $< -o $@
+
+$(OUTPUT)/%.pic.o: $(SRC)/%.cpp | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+LIB_PIC_OBJECTS := $(patsubst $(SRC)/%.cpp,$(OUTPUT)/%.pic.o,$(LIB_SOURCES))
+
+python: $(OUTPUT)/$(PYTHON_MODULE)
+	@echo "Python module built: $(OUTPUT)/$(PYTHON_MODULE)"
+
+check-python:
+	@which python3-config > /dev/null 2>&1 || (echo "Error: python3-config not found. Install python3-dev package." && exit 1)
+
+$(OUTPUT)/$(PYTHON_MODULE): $(OUTPUT)/bindings.o $(LIB_PIC_OBJECTS) | $(OUTPUT)
+	$(CXX) $(CXXFLAGS) -shared -fPIC $(INCLUDES) -o $@ $^ $(LFLAGS) $(PYTHON_LDFLAGS)
+
 clean:
-	$(RM) $(OUTPUTMAIN)
-	$(RM) $(call FIXPATH,$(OBJECTS))
-	$(RM) $(call FIXPATH,$(DEPS))
-	@echo Cleanup complete!
+	rm -rf $(OUTPUT)
+	@echo "Cleanup complete!"
 
 run: all
-	./$(OUTPUTMAIN)
-	@echo Executing 'run: all' complete!
+	./$(OUTPUT)/$(MAIN)
 
 compdb:
 	bear -- make clean
-	bear -- make
-	@echo compile_commands.json updated!
+	bear -- make all
+	@echo "compile_commands.json updated!"
+
+-include $(OUTPUT)/*.d

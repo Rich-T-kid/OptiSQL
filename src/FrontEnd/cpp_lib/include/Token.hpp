@@ -1,11 +1,11 @@
-# pragma once
+#pragma once
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
-struct Null {}; 
+struct Null {};
 
 using SqlLiteral = std::variant<std::string, long, double, bool, Null>;
 
@@ -16,6 +16,30 @@ enum class TokenType {
     Operator,
     Delimiter,
     EndOfFile
+};
+
+enum class OperatorType {
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Modulo,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessEqual,
+    GreaterThan,
+    GreaterEqual,
+    Concat
+};
+
+enum class DelimiterType {
+    LeftParen,
+    RightParen,
+    Comma,
+    Semicolon,
+    Dot,
+    Star
 };
 
 enum class KeywordType {
@@ -35,6 +59,8 @@ enum class KeywordType {
     BY,
     ORDER,
     HAVING,
+    ASC,
+    DESC,
     
     // Joins
     JOIN,
@@ -65,43 +91,27 @@ enum class KeywordType {
     SUM,
     AVG,
     
+    // Data Types (for CAST operations only - users cannot create tables)
     // Integer Types
     INT,
     INTEGER,
-    TINYINT,
-    SMALLINT,
-    MEDIUMINT,
     BIGINT,
-    INT2,
-    INT4,
-    INT8,
-    
+
     // Floating Point Types
     FLOAT,
-    FLOAT4,
-    FLOAT8,
-    FLOAT32,
-    FLOAT64,
     DOUBLE,
-    REAL,
     DECIMAL,
-    NUMERIC,
-    
-    // String Types
-    VARCHAR,
+
+    // String Type
     TEXT,
-    
-    // Boolean Types
+
+    // Boolean Type
     BOOLEAN,
-    BOOL,
-    
+
     // Date/Time Types
     DATE,
     TIME,
-    DATETIME,
     TIMESTAMP,
-    YEAR,
-    INTERVAL,
     
     // Set Operations
     UNION,
@@ -122,16 +132,21 @@ enum class KeywordType {
     ANY,
     SOME,
     EXISTS,
-
+    NULL_KW,
+    CAST,
+    IS,
+    TRUE_KW,
+    FALSE_KW,
 };
 
 struct Token {
-    // Simple value for most tokens
-    std::string text;  // The raw text from source
+    std::string text;
     TokenType type;
+    size_t line{1};
+    size_t column{1};
 
-    
-    // Additional parsed data depending on type
-    std::optional<std::vector<std::string>> qualifiedName;  // For identifiers
-    std::optional<SqlLiteral> literalValue;                 // For literals
+    std::optional<KeywordType> keywordType;
+    std::optional<OperatorType> operatorType;
+    std::optional<DelimiterType> delimiterType;
+    std::optional<SqlLiteral> literalValue;
 };
