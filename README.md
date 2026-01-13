@@ -6,19 +6,21 @@ A high-performance, in-memory query execution engine.
 ![Rust Tests](https://github.com/Rich-T-kid/OptiSQL/actions/workflows/rust-test.yml/badge.svg)
 ![Frontend Tests](https://github.com/Rich-T-kid/OptiSQL/actions/workflows/frontend-test.yml/badge.svg)
 
-
 ## Overview
 
 OptiSQL is a custom in-memory query execution engine. The backend (physical execution) is built using golang and rust.The front end (query parsing & optimization) is built using C++.
 
 **Technologies:**
+
 - Go/Rust (physical optimizer, operators)
 - Substrait (logical/physical plan representation)
 - C++ (query parser & optimizer)
 - ect (make,git,s3)
+
 ## Getting Started
 
 ### Prerequisites
+
 - Go 1.24+
 - Rust 1.70+
 - C++23
@@ -83,6 +85,7 @@ OptiSQL/
 Initial development is done in **Go** (`opti-sql-go`), which serves as the primary implementation. The **Rust** version (`opti-sql-rs`) is developed shortly after as a learning exercise and eventual performance-optimized alternative, closely mirroring the Go implementation.
 
 **Key Directories:**
+
 - `/operators` - SQL operator implementations (filter, join, aggregation, project)
 - `/physical-optimizer` - Query plan parsing and optimization
 - `/substrait` - Substrait plan integration
@@ -102,6 +105,7 @@ We use a structured branching model to maintain stability and enable smooth coll
 This approach prevents unstable code from reaching `main`, simplifies rollbacks, and ensures all changes undergo proper testing and review before deployment. Feature branches isolate work, allowing focused reviews and parallel development without conflicts. The `pre-release` branch acts as a staging area where features are bundled together before being released as a new version.
 
 **Workflow:**
+
 1. Create a feature branch from `pre-release`
 2. Implement your changes with tests
 3. Open a PR to merge into `pre-release`
@@ -112,6 +116,7 @@ This approach prevents unstable code from reaching `main`, simplifies rollbacks,
 ### Code Quality
 
 All code quality checks are automated and enforced by CI:
+
 - **Linting** - `golangci-lint` (Go), `clippy` (Rust)
 - **Formatting** - `go fmt` (Go), `cargo fmt` (Rust)
 - **Testing** - Unit tests required for all new code
@@ -138,10 +143,41 @@ This runs formatting, linting, and all tests.
 ## Contributing
 
 Want to contribute? Check out [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
+
 - Writing and running tests
 - PR format and commit message conventions
 - Development workflow and tooling
 - Build and run instructions
 
+## How to build
+
+```bash
+docker buildx build \
+  --platform linux/amd64 \
+  -t rich239/execution-engine:0.9.2 \ ## bump major/minor
+  -t rich239/execution-engine:latest \
+  --push \
+  .
+
+```
+
+## How to run
+
+```bash
+docker pull rich239/execution-engine
+docker run -p 7000:7000 rich239/execution-engine
+```
+
+## Example GRPC body
+
+```bash
+{
+    "id": "97b61a8f-ffe1-4e4a-b6d7-73619698dc7a",
+    "sql_statement": "select * from table1 where id > 10",
+    "logical_plan": "ewogICAgIkVtaXQiOiAKICAgIHsKICAgICAgICAiT3BlcmF0b3IiOiAiRmlsdGVyIiwKICAgICAgICAiRmlsdGVyIjogCiAgICAgICAgewogICAgICAgICAgICAiaW5wdXQiOiAKICAgICAgICAgICAgewogICAgICAgICAgICAgICAgIk9wZXJhdG9yIjogIlNvdXJjZSIsCiAgICAgICAgICAgICAgICAiU291cmNlIjogCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgImZpbGUtbmFtZSI6ICJ1c2VyX3Rlc3RfZGF0YS5jc3YiLAogICAgICAgICAgICAgICAgICAgICJsb2NhbCI6IGZhbHNlCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJleHByZXNzaW9uIjogCiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJleHByX3R5cGUiOiAiQmluYXJ5RXhwciIsCiAgICAgICAgICAgICAgICAib3AiOiAiR3JlYXRlclRoYW4iLAogICAgICAgICAgICAgICAgImxlZnQiOiAKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAiZXhwcl90eXBlIjogIkNvbHVtblJlc29sdmUiLAogICAgICAgICAgICAgICAgICAgICJuYW1lIjogImFnZV95ZWFycyIKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICAicmlnaHQiOiAKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAiZXhwcl90eXBlIjogIkxpdGVyYWxSZXNvbHZlIiwKICAgICAgICAgICAgICAgICAgICAidmFsdWUiOiAxMCwKICAgICAgICAgICAgICAgICAgICAibGl0X3R5cGUiOiAiaW50IgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9CiAgICAgICAgfQogICAgfQp9"
+}
+```
+
 ## License
+
 This project is licensed under the terms specified in [LICENSE.txt](LICENSE.txt).

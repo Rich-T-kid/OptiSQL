@@ -51,7 +51,7 @@ func Start() chan struct{} {
 
 	stopChan := make(chan struct{})
 
-	log.Printf("Substrait server listening on port %d", c.Server.Port)
+	log.Printf("Substrait server listening on %s:%d", c.Server.Host, c.Server.Port)
 	go unifiedShutdownHandler(ss, grpcServer, stopChan)
 	go func() {
 		if err := grpcServer.Serve(*ss.listener); err != nil {
@@ -77,5 +77,5 @@ func unifiedShutdownHandler(s *SubstraitServer, grpcServer *grpc.Server, stopCha
 	grpcServer.GracefulStop()
 
 	fmt.Println("Server shutdown complete")
-	os.Exit(1)
+	os.Exit(0)
 }

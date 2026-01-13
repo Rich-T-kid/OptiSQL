@@ -63,8 +63,8 @@ type secretesConfig struct {
 
 var configInstance *Config = &Config{
 	Server: serverConfig{
-		Port:             8080,
-		Host:             "localhost",
+		Port:             7000,
+		Host:             "0.0.0.0",
 		Timeout:          30,
 		MaxRequestSizeMB: 15,
 	},
