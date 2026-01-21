@@ -72,7 +72,7 @@ func (s *SubstraitServer) ExecuteQuery(ctx context.Context, req *QueryExecutionR
 	}
 	// include random number for the sake of avoiding conflicts, should resolve this at the
 	// logical processing step but for now this works
-	fName := fmt.Sprintf("%s-%s-%d", req.SqlStatement, req.Id, rand.IntN(1000))
+	fName := fmt.Sprintf("%s-%s-%d", strings.ReplaceAll(req.SqlStatement, " ", "-"), req.Id, rand.IntN(1000))
 	if err = project.UploadResults(fName, csv); err != nil {
 		return &QueryExecutionResponse{
 			S3ResultLink: "NAN",
@@ -100,7 +100,7 @@ func Start() chan struct{} {
 	if err != nil {
 		log.Fatalf("Failed to listen on port %d: %v", c.Server.Port, err)
 	}
-
+	fmt.Printf("Execution server is running on %s:%d", c.Server.Host, c.Server.Port)
 	grpcServer := grpc.NewServer()
 	ss := newSubstraitServer(&listener)
 	RegisterSSOperationServer(grpcServer, ss)

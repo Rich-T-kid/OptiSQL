@@ -117,7 +117,9 @@ func UploadResults(fileName string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.PutObject(bucket, fileName, bytes.NewReader(content), int64(len(content)), minio.PutObjectOptions{})
+	_, err = client.PutObject(bucket, fileName, bytes.NewReader(content), int64(len(content)), minio.PutObjectOptions{UserMetadata: map[string]string{
+		"x-amz-acl": "public-read",
+	}})
 	return err
 
 }
