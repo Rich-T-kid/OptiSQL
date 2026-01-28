@@ -1,0 +1,179 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #0f0f0f;
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #fff;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 14px;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.file-input {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 2px dashed #333;
+  border-radius: 8px;
+  background: #1a1a1a;
+  color: #888;
+  cursor: pointer;
+  text-align: center;
+}
+
+.file-input:hover {
+  border-color: #4a9eff;
+}
+
+.file-input.has-file {
+  border-color: #4a9eff;
+  color: #4a9eff;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  background: #4a9eff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background: #3a8eef;
+}
+
+button:disabled {
+  background: #333;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.result {
+  margin-top: 30px;
+  padding: 20px;
+  border-radius: 8px;
+  background: #1a1a1a;
+}
+
+.result.success {
+  border: 1px solid #4caf50;
+}
+
+.result.error {
+  border: 1px solid #f44336;
+}
+
+.result h3 {
+  margin-bottom: 12px;
+}
+
+.result-link {
+  word-break: break-all;
+  color: #4a9eff;
+  text-decoration: none;
+}
+
+.result-link:hover {
+  text-decoration: underline;
+}
+
+.error-message {
+  color: #f44336;
+}
+
+.execution-time {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
+}
+
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #888;
+}
+
+.table-container {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.result-table th,
+.result-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.result-table th {
+  background: #252525;
+  color: #4a9eff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.result-table tr:hover {
+  background: #252525;
+}
+
+.result-table td {
+  color: #e0e0e0;
+}
+
+.row-count {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #888;
+}

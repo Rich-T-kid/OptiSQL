@@ -1,21 +1,20 @@
 services:
   fastapi:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: FrontEnd/Dockerfile
     container_name: optisql-frontend
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     volumes:
-      # Mount the app directory
-      # TODO: need to add cpp library
       - ./app:/app/app
-      - ./.env:/app/.env
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/api/v1/health"]
       interval: 30s
