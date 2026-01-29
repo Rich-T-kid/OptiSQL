@@ -73,6 +73,8 @@ func (s *SubstraitServer) ExecuteQuery(ctx context.Context, req *QueryExecutionR
 	// include random number for the sake of avoiding conflicts, should resolve this at the
 	// logical processing step but for now this works
 	fName := fmt.Sprintf("%s-%s-%d", strings.ReplaceAll(req.SqlStatement, " ", "-"), req.Id, rand.IntN(1000))
+	// ! todo: finish debugging
+	fmt.Printf("csv file-name: {%s}, produced:\n%s", fName, csv)
 	if err = project.UploadResults(fName, csv); err != nil {
 		return &QueryExecutionResponse{
 			S3ResultLink: "NAN",

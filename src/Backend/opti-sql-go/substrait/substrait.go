@@ -722,6 +722,7 @@ func parseHaving(havingOBJ jsonOBJ, plan *planMetaData) (operators.Operator, err
 // expressions need to be handled in a special way since they contain serveral keys
 func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 	// grab tje expr_type and then parse based on that
+	fmt.Printf("(IN) json object passed in for expression parsing: %v\n", m)
 	err := containsFields([]string{"expr_type"}, m)
 	if err != nil {
 		return nil, fmt.Errorf("malformed expression body. Doesnt contain expr_type field")
@@ -756,11 +757,16 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		}
 		var value any
 		var arrowType arrow.DataType
+		fmt.Printf("(Literal Resolve): raw_value:%v , lit_type:%v\n", m["value"], m["lit_type"])
 		switch m["lit_type"].(string) {
 		case "int":
 			arrowType = arrow.PrimitiveTypes.Int64
-			v, _ := m["value"].(int)
-			value = int64(v)
+			switch val := m["value"].(type) {
+			case int:
+				value = int64(val)
+			case float64:
+				value = int64(val)
+			}
 		case "string":
 			arrowType = arrow.BinaryTypes.String
 			v, _ := m["value"].(string)
@@ -803,6 +809,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 			return nil, err
 		}
 		binaryExpression := Expr.NewBinaryExpr(left, operator, right)
+		fmt.Printf("(OUT) expression: %v\n", binaryExpression)
 		return binaryExpression, nil
 	case "ScalarFunction":
 		neededFields := []string{"func", "expr"}

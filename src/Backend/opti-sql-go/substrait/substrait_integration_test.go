@@ -1,6 +1,7 @@
 package substrait
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1327,6 +1328,46 @@ func TestSubstraitFilesMedium(t *testing.T) {
 					t.Logf("[%s - %s]\n%s\n", test.sqlEquiv, test.name, rb.PrettyPrint())
 				}
 			}
+		})
+	}
+}
+
+func TestSubstraitRegression(t *testing.T) {
+	basePath := filepath.Join("..", "..", "test_data", "base64-encoding")
+	tests := []struct {
+		testName string
+		fileName string
+	}{
+		{
+			testName: "select id,name,age from employees where id > 5",
+			fileName: "select-filter.txt",
+		},
+	}
+	for _, testObj := range tests {
+		t.Run(testObj.testName, func(t *testing.T) {
+			f, err := os.Open(filepath.Join(basePath, testObj.fileName))
+			if err != nil {
+				t.Fatalf("failed to open %s, recieved this error: %v", testObj.fileName, err)
+			}
+			base64Content, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatalf("failed to read file contents, recieved this error: %v", err)
+			}
+			decodedPlan, err := base64.StdEncoding.DecodeString(string(base64Content))
+			if err != nil {
+				t.Fatalf("failed to base64 decode logical plan: %v", err)
+			}
+			source := strings.NewReader(string(decodedPlan))
+			results, err := consumePlan(source, &planMetaData{id: testObj.testName})
+			if err != nil {
+				t.Fatalf("error consuming logical plan: %v", err)
+			}
+			rc, err := results.consumeAll()
+			if err != nil {
+				t.Fatalf("error consuming all results: %v", err)
+			}
+			csv, err := rc.ToCSV()
+			fmt.Printf("csv content:\n%s", csv)
 		})
 	}
 }
