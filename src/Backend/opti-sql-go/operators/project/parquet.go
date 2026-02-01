@@ -25,7 +25,9 @@ type ParquetSource struct {
 	schema             *arrow.Schema
 	projectionPushDown []string // columns to project up
 	reader             pqarrow.RecordReader
-	done               bool // if set to true always return io.EOF
+	bufferedCols       []arrow.Array // internal buffer for excess rows
+	bufferedSize       int64         // number of rows currently buffered
+	done               bool          // if set to true always return io.EOF
 }
 
 func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
@@ -58,6 +60,7 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 		schema:             rdr.Schema(),
 		projectionPushDown: []string{},
 		reader:             rdr,
+		bufferedCols:       make([]arrow.Array, rdr.Schema().NumFields()),
 	}, nil
 
 }
@@ -107,63 +110,107 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*Parq
 		schema:             rdr.Schema(),
 		projectionPushDown: columns,
 		reader:             rdr,
+		bufferedCols:       make([]arrow.Array, rdr.Schema().NumFields()),
 	}, nil
 }
 
 // double check that this return exactly n rows in a column.
 // ! buffer in memory if what is read in is too much  > n
 func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
-	if ps.reader == nil || ps.done {
+	if ps.reader == nil || (ps.done && ps.bufferedSize == 0) {
 		return nil, io.EOF
 	}
-	columns := make([]arrow.Array, len(ps.schema.Fields()))
-	curRow := 0
-	for curRow < int(n) && ps.reader.Next() {
+
+	mem := memory.NewGoAllocator()
+
+	// Read more data if buffer doesn't have enough rows
+	for ps.bufferedSize < int64(n) && !ps.done {
+		if !ps.reader.Next() {
+			ps.done = true
+			break
+		}
+
 		err := ps.reader.Err()
 		if err != nil {
 			return nil, err
 		}
+
 		record := ps.reader.Record()
 		numCols := int(record.NumCols())
 		numRows := int(record.NumRows())
 
 		for colIdx := 0; colIdx < numCols; colIdx++ {
-
 			batchCol := record.Column(colIdx)
-			existing := columns[colIdx]
-			// First time seeing this column → just assign it
+			existing := ps.bufferedCols[colIdx]
+
 			if existing == nil {
 				batchCol.Retain()
-				columns[colIdx] = batchCol
-				continue
+				ps.bufferedCols[colIdx] = batchCol
+			} else {
+				// Concatenate existing + new
+				combined, err := array.Concatenate([]arrow.Array{existing, batchCol}, mem)
+				if err != nil {
+					return nil, err
+				}
+				existing.Release()
+				ps.bufferedCols[colIdx] = combined
 			}
-
-			// Otherwise combine existing + new batch column
-			combined := CombineArray(existing, batchCol)
-
-			// Replace
-			columns[colIdx] = combined
-
-			// Release the old existing array to avoid leaks
-			existing.Release()
 		}
-		record.Release()
 
-		curRow += numRows
+		ps.bufferedSize += int64(numRows)
+		record.Release()
 	}
 
-	// If we didn't read any rows, mark as done and return EOF
-	if curRow == 0 {
-		ps.done = true
+	// If buffer is empty, return EOF
+	if ps.bufferedSize == 0 {
 		return nil, io.EOF
+	}
+
+	// Emit up to n rows
+	toEmit := min(int64(n), ps.bufferedSize)
+	out, err := ps.sliceBufferCols(toEmit, mem)
+	if err != nil {
+		return nil, err
 	}
 
 	return &operators.RecordBatch{
 		Schema:   ps.schema,
-		Columns:  columns,
-		RowCount: uint64(curRow),
+		Columns:  out,
+		RowCount: uint64(toEmit),
 	}, nil
 }
+
+func (ps *ParquetSource) sliceBufferCols(n int64, mem memory.Allocator) ([]arrow.Array, error) {
+	out := make([]arrow.Array, len(ps.bufferedCols))
+
+	total := ps.bufferedSize
+	limit := n
+	if limit > total {
+		limit = total
+	}
+
+	// For each column: slice out rows to emit and rows to keep
+	for i, col := range ps.bufferedCols {
+		// emit slice [0:limit]
+		sliceOut := array.NewSlice(col, 0, limit)
+		out[i] = sliceOut
+
+		// keep remaining slice [limit:total]
+		keepSlice := array.NewSlice(col, limit, total)
+
+		// release old buffer column
+		col.Release()
+
+		// store updated buffer
+		ps.bufferedCols[i] = keepSlice
+	}
+
+	// update size
+	ps.bufferedSize = total - limit
+
+	return out, nil
+}
+
 func (ps *ParquetSource) Close() error {
 	ps.reader.Release()
 	ps.reader = nil
