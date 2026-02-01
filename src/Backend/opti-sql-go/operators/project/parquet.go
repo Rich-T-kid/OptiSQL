@@ -111,8 +111,9 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*Parq
 }
 
 // double check that this return exactly n rows in a column.
+// ! buffer in memory if what is read in is too much  > n
 func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
-	if ps.reader == nil || ps.done || !ps.reader.Next() {
+	if ps.reader == nil || ps.done {
 		return nil, io.EOF
 	}
 	columns := make([]arrow.Array, len(ps.schema.Fields()))
@@ -150,6 +151,13 @@ func (ps *ParquetSource) Next(n uint16) (*operators.RecordBatch, error) {
 
 		curRow += numRows
 	}
+
+	// If we didn't read any rows, mark as done and return EOF
+	if curRow == 0 {
+		ps.done = true
+		return nil, io.EOF
+	}
+
 	return &operators.RecordBatch{
 		Schema:   ps.schema,
 		Columns:  columns,

@@ -83,7 +83,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if p.done {
 		return nil, io.EOF
 	}
-
+	fmt.Printf("inner operator name: %v\n", p.input.Name())
 	childBatch, err := p.input.Next(n)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
 		outPutCols[i] = arr
 		arr.Retain()
 	}
-	operators.ReleaseArrays(childBatch.Columns)
+	//operators.ReleaseArrays(childBatch.Columns)
 	return &operators.RecordBatch{
 		Schema:   &p.outputschema,
 		Columns:  outPutCols,

@@ -721,3 +721,5 @@ func TestCombineArray_UnsupportedType(t *testing.T) {
 	// Call CombineArray with unsupported type
 	_ = CombineArray(arr, arr)
 }
+
+// ! test that you get back the number of records you requested and set

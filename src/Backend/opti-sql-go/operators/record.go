@@ -407,6 +407,9 @@ func (rb *RecordBatch) ToCSV() ([]byte, error) {
 			case *array.String:
 				record[colIdx] = arr.Value(row)
 
+			case *array.LargeString:
+				record[colIdx] = arr.Value(row)
+
 			case *array.Int64:
 				record[colIdx] = strconv.FormatInt(arr.Value(row), 10)
 

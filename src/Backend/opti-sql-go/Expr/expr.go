@@ -199,7 +199,7 @@ func EvalColumn(c *ColumnResolve, batch *operators.RecordBatch) (arrow.Array, er
 	for i, f := range batch.Schema.Fields() {
 		if f.Name == c.Name {
 			col := batch.Columns[i]
-			col.Retain()
+			//col.Retain()
 			return col, nil
 		}
 	}
@@ -445,6 +445,7 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("leftArr:%v\nrightArr:%v\n")
 	ctx := context.Background()
 	opt := compute.ArithmeticOptions{}
 	switch b.Op {

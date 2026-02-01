@@ -1335,16 +1335,25 @@ func TestSubstraitFilesMedium(t *testing.T) {
 func TestSubstraitRegression(t *testing.T) {
 	basePath := filepath.Join("..", "..", "test_data", "base64-encoding")
 	tests := []struct {
+		id       int
 		testName string
 		fileName string
 	}{
-		{
+		/*{
+			id:       1,
 			testName: "select id,name,age from employees where id > 5",
 			fileName: "select-filter.txt",
+		},*/
+		{
+			id:       2,
+			testName: "SELECT name, age, salary FROM employees WHERE age > 30",
+			fileName: "select-filter-2.txt",
 		},
 	}
 	for _, testObj := range tests {
 		t.Run(testObj.testName, func(t *testing.T) {
+			testID := testObj.id
+			fmt.Printf("%v\n", testID)
 			f, err := os.Open(filepath.Join(basePath, testObj.fileName))
 			if err != nil {
 				t.Fatalf("failed to open %s, recieved this error: %v", testObj.fileName, err)
@@ -1353,6 +1362,7 @@ func TestSubstraitRegression(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to read file contents, recieved this error: %v", err)
 			}
+			fmt.Println("size of b64 content:", len(base64Content))
 			decodedPlan, err := base64.StdEncoding.DecodeString(string(base64Content))
 			if err != nil {
 				t.Fatalf("failed to base64 decode logical plan: %v", err)

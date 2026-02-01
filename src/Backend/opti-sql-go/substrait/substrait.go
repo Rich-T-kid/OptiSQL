@@ -48,6 +48,7 @@ type Emiter struct {
 
 func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
 	var results *operators.RecordBatch
+	fmt.Printf("inner oprator name: %v\n", e.emitOperator.Name())
 	mem := memory.NewGoAllocator()
 	for {
 		intermediate, err := e.emitOperator.Next(math.MaxInt16)

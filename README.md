@@ -143,7 +143,7 @@ make pre-push
 ```bash
 docker buildx build \
   --platform linux/amd64 \
-  -t rich239/execution-engine:0.9.2 \ ## bump major/minor
+  -t rich239/execution-engine:0.9.3 \
   -t rich239/execution-engine:latest \
   --push \
   .

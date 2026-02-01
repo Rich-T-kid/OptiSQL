@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators"
@@ -43,6 +44,7 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 	if f.done && f.bufferedSize == 0 {
 		return nil, io.EOF
 	}
+	fmt.Printf("inner operator: %v\n", f.input.Name())
 	mem := memory.NewGoAllocator()
 	for f.bufferedSize < int64(n) && !f.done {
 		childBatch, err := f.input.Next(n)
@@ -53,6 +55,7 @@ func (f *FilterExec) Next(n uint16) (*operators.RecordBatch, error) {
 			}
 			return nil, err
 		}
+		fmt.Printf("eval pred: %v\n childBatch:%v\n", f.predicate, childBatch)
 		booleanMask, err := Expr.EvalExpression(f.predicate, childBatch)
 		if err != nil {
 			return nil, err
