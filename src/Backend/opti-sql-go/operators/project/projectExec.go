@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 
 	"github.com/apache/arrow/go/v17/arrow"
+	"go.uber.org/zap"
 )
 
 var (
@@ -80,10 +82,11 @@ func NewProjectExec(input operators.Operator, exprs []Expr.Expression) (*Project
 // pretty simple, read from child operator and prune columns
 // pass through error && handles EOF alike
 func (p *ProjectExec) Next(n uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if p.done {
 		return nil, io.EOF
 	}
-	fmt.Printf("inner operator name: %v\n", p.input.Name())
+	logger.Debug("Project operator fetching from child", zap.String("child_operator", p.input.Name()))
 	childBatch, err := p.input.Next(n)
 	if err != nil {
 		return nil, err

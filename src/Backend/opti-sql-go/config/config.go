@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -106,20 +107,31 @@ func GetConfig() *Config {
 
 // overwrite global instance with loaded config
 func Decode(filePath string) error {
+	logger := GetLogger()
+	logger.Info("Loading config file", zap.String("file_path", filePath))
+
 	suffix := strings.Split(filePath, ".")[len(strings.Split(filePath, "."))-1]
 	if suffix != "yaml" && suffix != "yml" {
+		logger.Error("Invalid config file extension", zap.String("extension", suffix))
 		return errors.New("file must be a .yaml or .yml file")
 	}
 	r, err := os.Open(filePath)
 	if err != nil {
+		logger.Error("Failed to open config file", zap.Error(err), zap.String("file_path", filePath))
 		return err
 	}
 	config := make(map[string]interface{})
 	decoder := yaml.NewDecoder(r)
 	if err := decoder.Decode(config); err != nil {
+		logger.Error("Failed to decode YAML config", zap.Error(err))
 		return fmt.Errorf("failed to decode config: %w", err)
 	}
+	logger.Info("Config file decoded successfully")
 	mergeConfig(configInstance, config)
+	logger.Info("Config merged successfully",
+		zap.Int("server_port", configInstance.Server.Port),
+		zap.Int("batch_size", configInstance.Batch.Size),
+	)
 	return nil
 }
 func mergeConfig(dst *Config, src map[string]interface{}) {

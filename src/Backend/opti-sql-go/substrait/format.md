@@ -504,3 +504,5 @@ limit 10
 ```
 
 ---
+
+SELECT id, age_years as age from integration_test_data WHERE age > 15 LIMIT 5

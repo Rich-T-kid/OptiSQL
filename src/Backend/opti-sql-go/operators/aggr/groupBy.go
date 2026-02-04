@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 /*
@@ -55,9 +57,11 @@ func NewGroupByExec(child operators.Operator, groupExpr []AggregateFunctions, gr
 grab child rows
 */
 func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if g.done {
 		return nil, io.EOF
 	}
+	logger.Debug("GroupBy operator starting", zap.Int("num_group_by_cols", len(g.groupByExpr)), zap.Int("num_aggregations", len(g.groupExpr)))
 
 	for {
 		childBatch, err := g.input.Next(batchSize)
@@ -155,6 +159,7 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 		operators.ReleaseArrays(childBatch.Columns)
 	}
 
+	logger.Info("GroupBy aggregation complete", zap.Int("num_groups", len(g.groups)))
 	// 4. Build output RecordBatch
 	batch := buildGroupByOutput(g)
 

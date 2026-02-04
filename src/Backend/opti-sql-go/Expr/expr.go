@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"regexp"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 var (
@@ -437,6 +439,7 @@ func NewBinaryExpr(left Expression, op BinaryOperator, right Expression) *Binary
 }
 
 func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error) {
+	logger := config.GetLogger()
 	leftArr, err := EvalExpression(b.Left, batch)
 	if err != nil {
 		return nil, err
@@ -445,7 +448,11 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("leftArr:%v\nrightArr:%v\n")
+	logger.Debug("Evaluating binary expression",
+		zap.String("operator", fmt.Sprintf("%v", b.Op)),
+		zap.Int("left_len", leftArr.Len()),
+		zap.Int("right_len", rightArr.Len()),
+	)
 	ctx := context.Background()
 	opt := compute.ArithmeticOptions{}
 	switch b.Op {

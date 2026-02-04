@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 var (
@@ -176,9 +178,11 @@ func NewHashJoinExec(left operators.Operator, right operators.Operator, clause J
 }
 
 func (hj *HashJoinExec) Next(_ uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if hj.done {
 		return nil, io.EOF
 	}
+	logger.Debug("Hash join starting", zap.String("join_type", hj.joinType.String()), zap.Int("join_conditions", len(hj.clause.LeftS)))
 	mem := memory.NewGoAllocator()
 	leftArr, err := consumeOperator(hj.leftSource, mem)
 	if err != nil {
@@ -209,8 +213,10 @@ func (hj *HashJoinExec) Next(_ uint16) (*operators.RecordBatch, error) {
 		return nil, err
 	}
 	ht := buildRightHashTable(rightComp, rightRowCount)
+	logger.Debug("Hash table built", zap.Int("left_rows", leftRowCount), zap.Int("right_rows", rightRowCount))
 	pairs := probeJoin(leftComp, ht, leftRowCount)
 	if len(pairs) == 0 {
+		logger.Debug("Join produced no matching pairs")
 		hj.done = true
 		return &operators.RecordBatch{
 			Schema:   hj.Schema(),
@@ -227,6 +233,7 @@ func (hj *HashJoinExec) Next(_ uint16) (*operators.RecordBatch, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("Hash join complete", zap.Int("output_rows", outArr[0].Len()), zap.Int("matching_pairs", len(pairs)))
 	hj.done = true
 	return &operators.RecordBatch{
 		Schema:   hj.schema,

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
+	"go.uber.org/zap"
 )
 
 var (
@@ -203,9 +205,11 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 // updates the accumulators for each value, and returns a single output batch containing
 // the final aggregation results. It returns io.EOF after producing the result batch.
 func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if a.done {
 		return nil, io.EOF
 	}
+	logger.Debug("Global aggregation starting", zap.Int("num_aggregations", len(a.aggExpressions)))
 	for {
 		childBatch, err := a.input.Next(n)
 		if err != nil {

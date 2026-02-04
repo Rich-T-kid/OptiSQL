@@ -14,6 +14,7 @@ import (
 	"github.com/apache/arrow/go/v17/parquet"
 	"github.com/apache/arrow/go/v17/parquet/file"
 	"github.com/apache/arrow/go/v17/parquet/pqarrow"
+	"go.uber.org/zap"
 )
 
 var (
@@ -39,7 +40,8 @@ func NewParquetSource(r parquet.ReaderAtSeeker) (*ParquetSource, error) {
 
 	defer func() {
 		if err := filerReader.Close(); err != nil {
-			fmt.Printf("warning: failed to close parquet reader: %v\n", err)
+			logger := config.GetLogger()
+			logger.Warn("Failed to close parquet reader", zap.Error(err))
 		}
 	}()
 
@@ -78,7 +80,8 @@ func NewParquetSourcePushDown(r parquet.ReaderAtSeeker, columns []string) (*Parq
 
 	defer func() {
 		if err := filerReader.Close(); err != nil {
-			fmt.Printf("warning: failed to close parquet reader: %v\n", err)
+			logger := config.GetLogger()
+			logger.Warn("Failed to close parquet reader", zap.Error(err))
 
 		}
 	}()

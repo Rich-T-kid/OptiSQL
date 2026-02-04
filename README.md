@@ -143,7 +143,7 @@ make pre-push
 ```bash
 docker buildx build \
   --platform linux/amd64 \
-  -t rich239/execution-engine:0.9.3 \
+  -t rich239/execution-engine:0.9.4 \
   -t rich239/execution-engine:latest \
   --push \
   .
@@ -188,3 +188,11 @@ docker buildx build \
 -t rich239/execution-engine:latest \
  --push \
  .
+
+# ! TODO:
+
+# fix aliasing (group_by,universal_Aggrs,projects)
+
+# push up to ec2 instance to run parser
+
+# fix the casting issues for taking in floats/ints (cast ints to floats if needed)
