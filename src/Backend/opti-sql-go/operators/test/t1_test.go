@@ -222,7 +222,7 @@ func TestProjectExec(t *testing.T) {
 
 		src, err := NewIntegrationSource1(mem)
 		if err != nil {
-			t.Fatalf("failed to create integration source: %v", err)
+			t.Errorf("failed to create integration source: %v", err)
 		}
 		exprs := Expr.NewExpressions(
 			Expr.NewColumnResolve("id"),
@@ -232,17 +232,17 @@ func TestProjectExec(t *testing.T) {
 		)
 		basicProj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("unexpected error\t%v\n", basicProj)
+			t.Errorf("unexpected error\t%v\n", basicProj)
 		}
 		//t.Logf("%v\n", basicProj.Schema())
 		rc, err := basicProj.Next(100)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				t.Fatalf("unexpected error %v\n", err)
+				t.Errorf("unexpected error %v\n", err)
 			}
 		}
 		if rc.RowCount != 20 {
-			t.Fatalf("expected 20 rows, got %d", rc.RowCount)
+			t.Errorf("expected 20 rows, got %d", rc.RowCount)
 		}
 	})
 	t.Run("projection_with_alias", func(t *testing.T) {
@@ -256,14 +256,14 @@ func TestProjectExec(t *testing.T) {
 
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("error: %v", err)
+			t.Errorf("error: %v", err)
 		}
 
 		batch, _ := proj.Next(50)
 
 		// verify alias appears in schema
 		if batch.Schema.Fields()[1].Name != "emp_salary" {
-			t.Fatalf("expected alias emp_salary, got %s", batch.Schema.Fields()[1].Name)
+			t.Errorf("expected alias emp_salary, got %s", batch.Schema.Fields()[1].Name)
 		}
 	})
 	t.Run("projection_expression_math", func(t *testing.T) {
@@ -284,7 +284,7 @@ func TestProjectExec(t *testing.T) {
 
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("error: %v", err)
+			t.Errorf("error: %v", err)
 		}
 
 		batch, _ := proj.Next(50)
@@ -294,13 +294,13 @@ func TestProjectExec(t *testing.T) {
 		sal := origin[4].(*array.Float64)
 		// check: for a non-null salary (row 0 = 50000)
 		if adjCol.Len() != sal.Len() {
-			t.Fatalf("expected adjusted salary length %d, got %d", sal.Len(), adjCol.Len())
+			t.Errorf("expected adjusted salary length %d, got %d", sal.Len(), adjCol.Len())
 		}
 		for i := 0; i < adjCol.Len(); i++ {
 			if !sal.IsNull(i) {
 				expected := sal.Value(i) * 1.10
 				if adjCol.Value(i) != expected {
-					t.Fatalf("row %d: expected adjusted salary %f, got %f", i, expected, adjCol.Value(i))
+					t.Errorf("row %d: expected adjusted salary %f, got %f", i, expected, adjCol.Value(i))
 				}
 			}
 		}
@@ -310,7 +310,7 @@ func TestProjectExec(t *testing.T) {
 
 		src, err := NewIntegrationSource1(mem)
 		if err != nil {
-			t.Fatalf("failed to create integration source: %v", err)
+			t.Errorf("failed to create integration source: %v", err)
 		}
 
 		exprs := Expr.NewExpressions(
@@ -322,15 +322,15 @@ func TestProjectExec(t *testing.T) {
 
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("unexpected project exec error: %v", err)
+			t.Errorf("unexpected project exec error: %v", err)
 		}
 
 		batch, err := proj.Next(100) // pull all rows at once
 		if err != nil {
-			t.Fatalf("unexpected error on Next: %v", err)
+			t.Errorf("unexpected error on Next: %v", err)
 		}
 		if batch == nil {
-			t.Fatalf("expected a batch but got nil")
+			t.Errorf("expected a batch but got nil")
 		}
 
 		// ---- get projected column (index 0) ----
@@ -341,7 +341,7 @@ func TestProjectExec(t *testing.T) {
 		firstNameCol := originCols[1].(*array.String) // index 1 is first_name
 
 		if upperCol.Len() != firstNameCol.Len() {
-			t.Fatalf("length mismatch: expected %d got %d",
+			t.Errorf("length mismatch: expected %d got %d",
 				firstNameCol.Len(), upperCol.Len())
 		}
 
@@ -349,7 +349,7 @@ func TestProjectExec(t *testing.T) {
 		for i := 0; i < upperCol.Len(); i++ {
 			if firstNameCol.IsNull(i) {
 				if !upperCol.IsNull(i) {
-					t.Fatalf("row %d: expected NULL but got value", i)
+					t.Errorf("row %d: expected NULL but got value", i)
 				}
 				continue
 			}
@@ -358,7 +358,7 @@ func TestProjectExec(t *testing.T) {
 			got := upperCol.Value(i)
 
 			if expected != got {
-				t.Fatalf("row %d: expected %q, got %q", i, expected, got)
+				t.Errorf("row %d: expected %q, got %q", i, expected, got)
 			}
 		}
 	})
@@ -378,7 +378,7 @@ func TestFilterExec(t *testing.T) {
 		names, cols := generateIntegrationDataset1(mem)
 		src, err := project.NewInMemoryProjectExecFromArrays(names, cols)
 		if err != nil {
-			t.Fatalf("failed to create in-memory source: %v", err)
+			t.Errorf("failed to create in-memory source: %v", err)
 		}
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age"),
@@ -388,22 +388,22 @@ func TestFilterExec(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		batch, err := filt.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		if batch == nil {
-			t.Fatalf("expected rows, got nil batch")
+			t.Errorf("expected rows, got nil batch")
 		}
 		ageCol, _ := batch.ColumnByName("age")
 		for i := 0; i < ageCol.Len(); i++ {
 			ageValue := ageCol.(*array.Int32).Value(i)
 			if ageValue <= 30 {
-				t.Fatalf("expected age > 30, got %d", ageValue)
+				t.Errorf("expected age > 30, got %d", ageValue)
 			}
 		}
 
@@ -414,7 +414,7 @@ func TestFilterExec(t *testing.T) {
 		names, cols := generateIntegrationDataset1(mem)
 		src, err := project.NewInMemoryProjectExecFromArrays(names, cols)
 		if err != nil {
-			t.Fatalf("failed to create in-memory source: %v", err)
+			t.Errorf("failed to create in-memory source: %v", err)
 		}
 		pred := Expr.NewBinaryExpr(
 			Expr.NewBinaryExpr(
@@ -433,15 +433,15 @@ func TestFilterExec(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		batch, err := filt.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
-			t.Fatalf("expected non-nil batch")
+			t.Errorf("expected non-nil batch")
 		}
 
 		// validate
@@ -451,10 +451,10 @@ func TestFilterExec(t *testing.T) {
 		salColumn, _ := salCol.(*array.Float64)
 		for i := 0; i < int(batch.RowCount); i++ {
 			if depColumn.Value(i) != "Engineering" {
-				t.Fatalf("expected department 'Engineering', got %s", depColumn.Value(i))
+				t.Errorf("expected department 'Engineering', got %s", depColumn.Value(i))
 			}
 			if salColumn.Value(i) <= 70000 {
-				t.Fatalf("expected salary > 70000, got %f", salColumn.Value(i))
+				t.Errorf("expected salary > 70000, got %f", salColumn.Value(i))
 			}
 		}
 	})
@@ -464,24 +464,24 @@ func TestFilterExec(t *testing.T) {
 		names, cols := generateIntegrationDataset1(mem)
 		src, err := project.NewInMemoryProjectExecFromArrays(names, cols)
 		if err != nil {
-			t.Fatalf("failed to create in-memory source: %v", err)
+			t.Errorf("failed to create in-memory source: %v", err)
 		}
 		// We're filtering region IS NULL
 		pred := Expr.NewNullCheckExpr(Expr.NewColumnResolve("region"))
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		batch, err := filt.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		if batch == nil {
 			// possible: no NULLS
-			t.Fatalf("expected atleast one null")
+			t.Errorf("expected atleast one null")
 			return
 		}
 		t.Logf("batch: \t%v\n", batch.PrettyPrint())
@@ -490,7 +490,7 @@ func TestFilterExec(t *testing.T) {
 		regionArr := regionCol.(*array.String)
 		for i := 0; i < int(batch.RowCount); i++ {
 			if regionArr.IsNull(i) {
-				t.Fatalf("expected NULL region but got value=%s", regionArr.Value(i))
+				t.Errorf("expected NULL region but got value=%s", regionArr.Value(i))
 			}
 		}
 	})
@@ -514,12 +514,12 @@ func TestSortTest(t *testing.T) {
 
 		sortExec, err := aggr.NewSortExec(src, sortKeys)
 		if err != nil {
-			t.Fatalf("failed to create sort exec: %v", err)
+			t.Errorf("failed to create sort exec: %v", err)
 		}
 
 		batch, err := sortExec.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		salaryArr := batch.Columns[4].(*array.Float64)
@@ -529,7 +529,7 @@ func TestSortTest(t *testing.T) {
 				continue
 			}
 			if salaryArr.Value(i) < salaryArr.Value(i-1) {
-				t.Fatalf("salary not sorted ASC at row %d: %f < %f",
+				t.Errorf("salary not sorted ASC at row %d: %f < %f",
 					i, salaryArr.Value(i), salaryArr.Value(i-1))
 			}
 		}
@@ -547,12 +547,12 @@ func TestSortTest(t *testing.T) {
 
 		sortExec, err := aggr.NewSortExec(src, sortKeys)
 		if err != nil {
-			t.Fatalf("failed to create sort exec: %v", err)
+			t.Errorf("failed to create sort exec: %v", err)
 		}
 
 		batch, err := sortExec.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		lastArr := batch.Columns[2].(*array.String)
@@ -564,7 +564,7 @@ func TestSortTest(t *testing.T) {
 
 			// descending → current <= previous
 			if lastArr.Value(i) > lastArr.Value(i-1) {
-				t.Fatalf("last_name not sorted DESC at %d: %s > %s",
+				t.Errorf("last_name not sorted DESC at %d: %s > %s",
 					i, lastArr.Value(i), lastArr.Value(i-1))
 			}
 		}
@@ -582,12 +582,12 @@ func TestSortTest(t *testing.T) {
 
 		sortExec, err := aggr.NewSortExec(src, sortKeys)
 		if err != nil {
-			t.Fatalf("failed to create sort exec: %v", err)
+			t.Errorf("failed to create sort exec: %v", err)
 		}
 
 		batch, err := sortExec.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		deptArr := batch.Columns[5].(*array.String)
@@ -603,7 +603,7 @@ func TestSortTest(t *testing.T) {
 
 			// department ascending grouping
 			if currDept < prevDept {
-				t.Fatalf("department not sorted ASC at %d: %s < %s",
+				t.Errorf("department not sorted ASC at %d: %s < %s",
 					i, currDept, prevDept)
 			}
 
@@ -611,7 +611,7 @@ func TestSortTest(t *testing.T) {
 			if currDept == prevDept {
 				if !salaryArr.IsNull(i) && !salaryArr.IsNull(i-1) {
 					if salaryArr.Value(i) > salaryArr.Value(i-1) {
-						t.Fatalf("salary not DESC within department '%s' at row %d",
+						t.Errorf("salary not DESC within department '%s' at row %d",
 							currDept, i)
 					}
 				}
@@ -666,12 +666,12 @@ func TestIntegrationAggregations(t *testing.T) {
 				aggr.NewAggregateFunctions(aggr.Min, salCol),
 				aggr.NewAggregateFunctions(aggr.Max, salCol)})
 		if err != nil {
-			t.Fatalf("aggregation init failed: %v", err)
+			t.Errorf("aggregation init failed: %v", err)
 		}
 
 		batch, err := agg.Next(100)
 		if err != nil {
-			t.Fatalf("aggregation next failed: %v", err)
+			t.Errorf("aggregation next failed: %v", err)
 		}
 
 		// Extract columns from result
@@ -681,16 +681,16 @@ func TestIntegrationAggregations(t *testing.T) {
 		maxArr := batch.Columns[3].(*array.Float64)
 
 		if sumArr.Value(0) != sum {
-			t.Fatalf("SUM mismatch: expected %f, got %f", sum, sumArr.Value(0))
+			t.Errorf("SUM mismatch: expected %f, got %f", sum, sumArr.Value(0))
 		}
 		if avgArr.Value(0) != avg {
-			t.Fatalf("AVG mismatch: expected %f, got %f", avg, avgArr.Value(0))
+			t.Errorf("AVG mismatch: expected %f, got %f", avg, avgArr.Value(0))
 		}
 		if minArr.Value(0) != min {
-			t.Fatalf("MIN mismatch: expected %f, got %f", min, minArr.Value(0))
+			t.Errorf("MIN mismatch: expected %f, got %f", min, minArr.Value(0))
 		}
 		if maxArr.Value(0) != max {
-			t.Fatalf("MAX mismatch: expected %f, got %f", max, maxArr.Value(0))
+			t.Errorf("MAX mismatch: expected %f, got %f", max, maxArr.Value(0))
 		}
 	})
 
@@ -719,14 +719,14 @@ func TestIntegrationAggregations(t *testing.T) {
 			},
 		)
 		if err != nil {
-			t.Fatalf("agg init failed: %v", err)
+			t.Errorf("agg init failed: %v", err)
 		}
 
 		batch, _ := agg.Next(100)
 		sumArr := batch.Columns[0].(*array.Float64) // SUM(int32) -> int64
 
 		if sumArr.Value(0) != float64(sum) {
-			t.Fatalf("SUM(age) mismatch: expected %v, got %v", sum, sumArr.Value(0))
+			t.Errorf("SUM(age) mismatch: expected %v, got %v", sum, sumArr.Value(0))
 		}
 	})
 
@@ -761,7 +761,7 @@ func TestIntegrationAggregations(t *testing.T) {
 				aggr.NewAggregateFunctions(aggr.Max, Expr.NewColumnResolve("age")),
 			})
 		if err != nil {
-			t.Fatalf("agg init failed: %v", err)
+			t.Errorf("agg init failed: %v", err)
 		}
 
 		batch, _ := agg.Next(100)
@@ -770,10 +770,10 @@ func TestIntegrationAggregations(t *testing.T) {
 		maxArr := batch.Columns[1].(*array.Float64)
 
 		if minArr.Value(0) != float64(min) {
-			t.Fatalf("MIN(age) mismatch: expected %v, got %v", min, minArr.Value(0))
+			t.Errorf("MIN(age) mismatch: expected %v, got %v", min, minArr.Value(0))
 		}
 		if maxArr.Value(0) != float64(max) {
-			t.Fatalf("MAX(age) mismatch: expected %v, got %v", max, maxArr.Value(0))
+			t.Errorf("MAX(age) mismatch: expected %v, got %v", max, maxArr.Value(0))
 		}
 	})
 }
@@ -803,12 +803,12 @@ func TestGroupByExec(t *testing.T) {
 
 		gb, err := aggr.NewGroupByExec(src, aggs, groupByExpr)
 		if err != nil {
-			t.Fatalf("gb init failed: %v", err)
+			t.Errorf("gb init failed: %v", err)
 		}
 
 		batch, err := gb.Next(1024)
 		if err != nil {
-			t.Fatalf("group by Next failed: %v", err)
+			t.Errorf("group by Next failed: %v", err)
 		}
 
 		deptCol := batch.Columns[0].(*array.String)
@@ -835,7 +835,7 @@ func TestGroupByExec(t *testing.T) {
 			want := expected[key]
 
 			if got != want {
-				t.Fatalf("group %s: expected %d, got %d", key, want, got)
+				t.Errorf("group %s: expected %d, got %d", key, want, got)
 			}
 		}
 	})
@@ -854,12 +854,12 @@ func TestGroupByExec(t *testing.T) {
 
 		gb, err := aggr.NewGroupByExec(src, aggs, groupByExpr)
 		if err != nil {
-			t.Fatalf("init failed: %v", err)
+			t.Errorf("init failed: %v", err)
 		}
 
 		batch, err := gb.Next(1024)
 		if err != nil {
-			t.Fatalf("Next failed: %v", err)
+			t.Errorf("Next failed: %v", err)
 		}
 
 		deptCol := batch.Columns[0].(*array.String)
@@ -903,7 +903,7 @@ func TestGroupByExec(t *testing.T) {
 			want := expected[key]
 
 			if got != want {
-				t.Fatalf("(%s,%s): expected sum=%f, got %f", d, r, want, got)
+				t.Errorf("(%s,%s): expected sum=%f, got %f", d, r, want, got)
 			}
 		}
 	})
@@ -924,7 +924,7 @@ func TestGroupByExec(t *testing.T) {
 
 		batch, err := gb.Next(1024)
 		if err != nil {
-			t.Fatalf("Next failed: %v", err)
+			t.Errorf("Next failed: %v", err)
 		}
 
 		regionCol := batch.Columns[0].(*array.String)
@@ -951,7 +951,7 @@ func TestGroupByExec(t *testing.T) {
 			want := expected[k]
 
 			if got != want {
-				t.Fatalf("region=%s expected %d got %d", k, want, got)
+				t.Errorf("region=%s expected %d got %d", k, want, got)
 			}
 		}
 	})
@@ -984,7 +984,7 @@ func TestHavingExec(t *testing.T) {
 		gb := buildDeptAvg()
 
 		having := Expr.NewBinaryExpr(
-			Expr.NewColumnResolve("avg_Column(salary)"),
+			Expr.NewColumnResolve("salary"),
 			Expr.GreaterThan,
 			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 75000.0),
 		)
@@ -992,7 +992,7 @@ func TestHavingExec(t *testing.T) {
 		hv, _ := aggr.NewHavingExec(gb, having)
 		batch, err := hv.Next(500)
 		if err != nil {
-			t.Fatalf("having next failed: %v", err)
+			t.Errorf("having next failed: %v", err)
 		}
 		t.Logf("batch:\t%v\n", batch.PrettyPrint())
 
@@ -1001,7 +1001,7 @@ func TestHavingExec(t *testing.T) {
 
 		for i := 0; i < int(batch.RowCount); i++ {
 			if avgCol.Value(i) <= 75000 {
-				t.Fatalf("expected avg > 75k, got %f for dept %s",
+				t.Errorf("expected avg > 75k, got %f for dept %s",
 					avgCol.Value(i), deptCol.Value(i))
 			}
 		}
@@ -1012,16 +1012,22 @@ func TestHavingExec(t *testing.T) {
 		gb := buildDeptAvg()
 
 		having := Expr.NewBinaryExpr(
-			Expr.NewColumnResolve("avg_Column(salary)"),
+			Expr.NewColumnResolve("salary"),
 			Expr.GreaterThan,
 			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, 999999.0),
 		)
 
-		hv, _ := aggr.NewHavingExec(gb, having)
-		batch, _ := hv.Next(100)
+		hv, err := aggr.NewHavingExec(gb, having)
+		if err != nil {
+			t.Fatalf("failed to to construct havingExec: %v\n", err)
+		}
+		batch, err := hv.Next(100)
+		if err != nil {
+			t.Fatalf("failed to to grab recordbatch for havingExec: %v\n", err)
+		}
 
 		if batch.RowCount != 0 {
-			t.Fatalf("expected empty result")
+			t.Errorf("expected empty result")
 		}
 	})
 
@@ -1030,7 +1036,7 @@ func TestHavingExec(t *testing.T) {
 		gb := buildDeptAvg()
 
 		having := Expr.NewBinaryExpr(
-			Expr.NewColumnResolve("avg_Column(salary)"),
+			Expr.NewColumnResolve("salary"),
 			Expr.GreaterThan,
 			Expr.NewLiteralResolve(arrow.PrimitiveTypes.Float64, float64(0.0)),
 		)
@@ -1039,7 +1045,7 @@ func TestHavingExec(t *testing.T) {
 		batch, _ := hv.Next(1000)
 
 		if batch.RowCount == 0 {
-			t.Fatalf("expected some rows")
+			t.Errorf("expected some rows")
 		}
 	})
 }
@@ -1056,7 +1062,7 @@ func TestDistinctExec(t *testing.T) {
 	names, cols := generateIntegrationDataset1(mem)
 	src, err := project.NewInMemoryProjectExecFromArrays(names, cols)
 	if err != nil {
-		t.Fatalf("failed to create source: %v", err)
+		t.Errorf("failed to create source: %v", err)
 	}
 
 	// -------------------------------
@@ -1069,12 +1075,12 @@ func TestDistinctExec(t *testing.T) {
 
 		de, err := filter.NewDistinctExec(src, expr)
 		if err != nil {
-			t.Fatalf("distinct init failed: %v", err)
+			t.Errorf("distinct init failed: %v", err)
 		}
 
 		batch, err := de.Next(100)
 		if err != nil {
-			t.Fatalf("distinct next failed: %v", err)
+			t.Errorf("distinct next failed: %v", err)
 		}
 
 		//deptArr := batch.Columns[5].(*array.String)
@@ -1091,7 +1097,7 @@ func TestDistinctExec(t *testing.T) {
 		}
 
 		if int(batch.RowCount) != len(expected) {
-			t.Fatalf("expected %d distinct departments, got %d",
+			t.Errorf("expected %d distinct departments, got %d",
 				len(expected), batch.RowCount)
 		}
 	})
@@ -1109,12 +1115,12 @@ func TestDistinctExec(t *testing.T) {
 
 		de, err := filter.NewDistinctExec(src2, expr)
 		if err != nil {
-			t.Fatalf("distinct init failed: %v", err)
+			t.Errorf("distinct init failed: %v", err)
 		}
 
 		batch, err := de.Next(100)
 		if err != nil {
-			t.Fatalf("distinct next failed: %v", err)
+			t.Errorf("distinct next failed: %v", err)
 		}
 
 		regionArr := batch.Columns[6].(*array.String)
@@ -1130,7 +1136,7 @@ func TestDistinctExec(t *testing.T) {
 		}
 
 		if int(regionArr.Len()) != len(expected) {
-			t.Fatalf("expected %d distinct regions, got %d",
+			t.Errorf("expected %d distinct regions, got %d",
 				len(expected), regionArr.Len())
 		}
 	})
@@ -1147,16 +1153,16 @@ func TestDistinctExec(t *testing.T) {
 
 		de, err := filter.NewDistinctExec(src3, expr)
 		if err != nil {
-			t.Fatalf("distinct init failed: %v", err)
+			t.Errorf("distinct init failed: %v", err)
 		}
 
 		batch, err := de.Next(100)
 		if err != nil {
-			t.Fatalf("distinct next failed: %v", err)
+			t.Errorf("distinct next failed: %v", err)
 		}
 
 		if batch.RowCount != 20 {
-			t.Fatalf("expected 20 distinct id rows, got %d", batch.RowCount)
+			t.Errorf("expected 20 distinct id rows, got %d", batch.RowCount)
 		}
 	})
 }
@@ -1178,16 +1184,16 @@ func TestLimitExec(t *testing.T) {
 
 		lim, err := filter.NewLimitExec(src, 5)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil {
-			t.Fatalf("limit next error: %v", err)
+			t.Errorf("limit next error: %v", err)
 		}
 
 		if batch.RowCount != 5 {
-			t.Fatalf("expected 5 rows, got %d", batch.RowCount)
+			t.Errorf("expected 5 rows, got %d", batch.RowCount)
 		}
 
 		// verify first 5 IDs match original dataset
@@ -1196,7 +1202,7 @@ func TestLimitExec(t *testing.T) {
 
 		for i := 0; i < 5; i++ {
 			if idArr.Value(i) != origID.Value(i) {
-				t.Fatalf("row %d: expected id=%d, got id=%d",
+				t.Errorf("row %d: expected id=%d, got id=%d",
 					i, origID.Value(i), idArr.Value(i))
 			}
 		}
@@ -1210,16 +1216,16 @@ func TestLimitExec(t *testing.T) {
 
 		lim, err := filter.NewLimitExec(src, 20)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil {
-			t.Fatalf("limit error: %v", err)
+			t.Errorf("limit error: %v", err)
 		}
 
 		if batch.RowCount != 20 {
-			t.Fatalf("expected 20 rows, got %d", batch.RowCount)
+			t.Errorf("expected 20 rows, got %d", batch.RowCount)
 		}
 	})
 
@@ -1231,16 +1237,16 @@ func TestLimitExec(t *testing.T) {
 
 		lim, err := filter.NewLimitExec(src, 50)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil {
-			t.Fatalf("limit next failed: %v", err)
+			t.Errorf("limit next failed: %v", err)
 		}
 
 		if batch.RowCount != 20 {
-			t.Fatalf("expected 20 rows when limit > dataset size, got %d", batch.RowCount)
+			t.Errorf("expected 20 rows when limit > dataset size, got %d", batch.RowCount)
 		}
 	})
 }
@@ -1266,12 +1272,12 @@ func TestScalarStringFunctions(t *testing.T) {
 		// Evaluate: UPPER(department)
 		batch, err := src.Next(100)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		arr, err := Expr.EvalScalarFunction(upperExpr, batch)
 		if err != nil {
-			t.Fatalf("upper eval failed: %v", err)
+			t.Errorf("upper eval failed: %v", err)
 		}
 
 		out := arr.(*array.String)
@@ -1283,13 +1289,13 @@ func TestScalarStringFunctions(t *testing.T) {
 		for i := 0; i < int(out.Len()); i++ {
 			if deptArr.IsNull(i) {
 				if !out.IsNull(i) {
-					t.Fatalf("expected null at %d", i)
+					t.Errorf("expected null at %d", i)
 				}
 				continue
 			}
 			expected := strings.ToUpper(deptArr.Value(i))
 			if out.Value(i) != expected {
-				t.Fatalf("UPPER mismatch at row %d: got %s, expected %s",
+				t.Errorf("UPPER mismatch at row %d: got %s, expected %s",
 					i, out.Value(i), expected)
 			}
 		}
@@ -1304,12 +1310,12 @@ func TestScalarStringFunctions(t *testing.T) {
 		// Evaluate: LOWER(department)
 		batch, err := src.Next(100)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		arr, err := Expr.EvalScalarFunction(lowerExpr, batch)
 		if err != nil {
-			t.Fatalf("lower eval failed: %v", err)
+			t.Errorf("lower eval failed: %v", err)
 		}
 
 		out := arr.(*array.String)
@@ -1320,13 +1326,13 @@ func TestScalarStringFunctions(t *testing.T) {
 		for i := 0; i < int(out.Len()); i++ {
 			if deptArr.IsNull(i) {
 				if !out.IsNull(i) {
-					t.Fatalf("expected null at %d", i)
+					t.Errorf("expected null at %d", i)
 				}
 				continue
 			}
 			expected := strings.ToLower(deptArr.Value(i))
 			if out.Value(i) != expected {
-				t.Fatalf("LOWER mismatch at row %d: got %s, expected %s",
+				t.Errorf("LOWER mismatch at row %d: got %s, expected %s",
 					i, out.Value(i), expected)
 			}
 		}
@@ -1337,12 +1343,12 @@ func TestScalarStringFunctions(t *testing.T) {
 		fn := Expr.NewScalarFunction(Expr.Abs, Expr.NewColumnResolve("salary"))
 		exec, err := project.NewProjectExec(src, []Expr.Expression{fn})
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := exec.Next(50)
 		if err != nil {
-			t.Fatalf("exec failed: %v", err)
+			t.Errorf("exec failed: %v", err)
 		}
 
 		out := batch.Columns[0].(*array.Float64)
@@ -1350,7 +1356,7 @@ func TestScalarStringFunctions(t *testing.T) {
 		for i := 0; i < out.Len(); i++ {
 			val := out.Value(i)
 			if val < 0 {
-				t.Fatalf("abs result should never be negative, got %v", val)
+				t.Errorf("abs result should never be negative, got %v", val)
 			}
 		}
 	})
@@ -1365,12 +1371,12 @@ func TestScalarStringFunctions(t *testing.T) {
 		fn := Expr.NewScalarFunction(Expr.Round, Expr.NewColumnResolve("salary"))
 		exec, err := project.NewProjectExec(src, []Expr.Expression{fn})
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := exec.Next(50)
 		if err != nil {
-			t.Fatalf("exec failed: %v", err)
+			t.Errorf("exec failed: %v", err)
 		}
 
 		out := batch.Columns[0].(*array.Float64)
@@ -1381,7 +1387,7 @@ func TestScalarStringFunctions(t *testing.T) {
 			got := out.Value(i)
 
 			if expected != got {
-				t.Fatalf("round mismatch at %d: expected=%v got=%v", i, expected, got)
+				t.Errorf("round mismatch at %d: expected=%v got=%v", i, expected, got)
 			}
 		}
 	})
@@ -1406,16 +1412,16 @@ func TestHashJoinExec(t *testing.T) {
 
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("inner join init failed: %v", err)
+			t.Errorf("inner join init failed: %v", err)
 		}
 
 		batch, err := j.Next(1000)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		if batch.RowCount == 0 {
-			t.Fatalf("inner join returned zero rows (expected matches)")
+			t.Errorf("inner join returned zero rows (expected matches)")
 		}
 	})
 
@@ -1430,16 +1436,16 @@ func TestHashJoinExec(t *testing.T) {
 
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.LeftJoin, nil)
 		if err != nil {
-			t.Fatalf("left join init failed: %v", err)
+			t.Errorf("left join init failed: %v", err)
 		}
 
 		batch, err := j.Next(1000)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		if batch.RowCount < 20 {
-			t.Fatalf("left join should preserve all 20 left rows, got %d", batch.RowCount)
+			t.Errorf("left join should preserve all 20 left rows, got %d", batch.RowCount)
 		}
 	})
 
@@ -1454,16 +1460,16 @@ func TestHashJoinExec(t *testing.T) {
 
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.RightJoin, nil)
 		if err != nil {
-			t.Fatalf("right join init failed: %v", err)
+			t.Errorf("right join init failed: %v", err)
 		}
 
 		batch, err := j.Next(1000)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		if batch.RowCount < 20 {
-			t.Fatalf("right join should preserve all 20 right rows, got %d", batch.RowCount)
+			t.Errorf("right join should preserve all 20 right rows, got %d", batch.RowCount)
 		}
 	})
 
@@ -1479,16 +1485,16 @@ func TestHashJoinExec(t *testing.T) {
 
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("inner join init failed: %v", err)
+			t.Errorf("inner join init failed: %v", err)
 		}
 
 		batch, err := j.Next(1000)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		if batch.RowCount != 0 {
-			t.Fatalf("expected zero matches, got %d", batch.RowCount)
+			t.Errorf("expected zero matches, got %d", batch.RowCount)
 		}
 	})
 
@@ -1509,16 +1515,16 @@ func TestHashJoinExec(t *testing.T) {
 
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("multi-col join init failed: %v", err)
+			t.Errorf("multi-col join init failed: %v", err)
 		}
 
 		batch, err := j.Next(1000)
 		if err != nil {
-			t.Fatalf("unexpected: %v", err)
+			t.Errorf("unexpected: %v", err)
 		}
 
 		if batch.RowCount == 0 {
-			t.Fatalf("multi-column join should match some rows")
+			t.Errorf("multi-column join should match some rows")
 		}
 	})
 
@@ -1533,7 +1539,7 @@ func TestHashJoinExec(t *testing.T) {
 
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("join init failed: %v", err)
+			t.Errorf("join init failed: %v", err)
 		}
 
 		schema := j.Schema()
@@ -1552,7 +1558,7 @@ func TestHashJoinExec(t *testing.T) {
 		}
 
 		if !foundLeft || !foundRight {
-			t.Fatalf("schema prefixing failed: left_department=%v right_department=%v", foundLeft, foundRight)
+			t.Errorf("schema prefixing failed: left_department=%v right_department=%v", foundLeft, foundRight)
 		}
 	})
 }

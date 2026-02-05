@@ -159,7 +159,7 @@ func TestNewAggrExec(t *testing.T) {
 			t.Fatalf("expected 1 schema field, got %d", exec.Schema().NumFields())
 		}
 
-		expectedName := "min_Column(age)"
+		expectedName := "age"
 		if exec.Schema().Field(0).Name != expectedName {
 			t.Fatalf("expected name %s, got %s",
 				expectedName, exec.Schema().Field(0).Name)
@@ -184,9 +184,9 @@ func TestNewAggrExec(t *testing.T) {
 		schema := exec.Schema()
 
 		expected := []string{
-			"min_Column(id)",
-			"max_Column(salary)",
-			"avg_Column(age)",
+			"id",
+			"salary",
+			"age",
 		}
 
 		for i, f := range schema.Fields() {
@@ -562,9 +562,9 @@ func TestAggregateExecNext(t *testing.T) {
 		s := aggrExec.Schema()
 
 		expectedNames := []string{
-			"min_Column(id)",
-			"sum_Column(age)",
-			"count_Column(salary)",
+			"id",
+			"age",
+			"salary",
 		}
 
 		for i, f := range s.Fields() {

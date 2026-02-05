@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
+	"go.uber.org/zap"
 )
 
 var (
@@ -167,19 +169,19 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 		var fieldName string
 		switch agg.AggrFunc {
 		case Min:
-			fieldName = fmt.Sprintf("min_%s", agg.Child.String())
+			fieldName = fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 			accs[i] = newMinAggr()
 		case Max:
-			fieldName = fmt.Sprintf("max_%s", agg.Child.String())
+			fieldName = fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 			accs[i] = newMaxAggr()
 		case Count:
-			fieldName = fmt.Sprintf("count_%s", agg.Child.String())
+			fieldName = fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 			accs[i] = newCountAggr()
 		case Sum:
-			fieldName = fmt.Sprintf("sum_%s", agg.Child.String())
+			fieldName = fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 			accs[i] = newSumAggr()
 		case Avg:
-			fieldName = fmt.Sprintf("avg_%s", agg.Child.String())
+			fieldName = fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 			accs[i] = newAvgAggr()
 
 		default:
@@ -188,9 +190,20 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 		fields[i] = arrow.Field{
 			Name:     fieldName,
 			Type:     arrow.PrimitiveTypes.Float64,
-			Nullable: true,
+			Nullable: false,
 		}
 	}
+	logger := config.GetLogger()
+	logger.Info("Global aggregation schema created",
+		zap.Strings("input_columns", operators.GetSchemaFieldNames(child.Schema())),
+		zap.Strings("output_columns", func() []string {
+			names := make([]string, len(fields))
+			for i, f := range fields {
+				names[i] = f.Name
+			}
+			return names
+		}()),
+	)
 	return &AggrExec{
 		input:          child,
 		schema:         arrow.NewSchema(fields, nil),
@@ -203,9 +216,11 @@ func NewGlobalAggrExec(child operators.Operator, aggExprs []AggregateFunctions) 
 // updates the accumulators for each value, and returns a single output batch containing
 // the final aggregation results. It returns io.EOF after producing the result batch.
 func (a *AggrExec) Next(n uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if a.done {
 		return nil, io.EOF
 	}
+	logger.Debug("Global aggregation starting", zap.Int("num_aggregations", len(a.aggExpressions)))
 	for {
 		childBatch, err := a.input.Next(n)
 		if err != nil {

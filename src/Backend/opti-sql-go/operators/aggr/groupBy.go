@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 /*
@@ -36,10 +38,15 @@ type GroupByExec struct {
 }
 
 func NewGroupByExec(child operators.Operator, groupExpr []AggregateFunctions, groupBy []Expr.Expression) (*GroupByExec, error) {
+	logger := config.GetLogger()
 	s, err := buildGroupBySchema(child.Schema(), groupBy, groupExpr)
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("GroupBy schema created",
+		zap.Strings("input_columns", operators.GetSchemaFieldNames(child.Schema())),
+		zap.Strings("output_columns", operators.GetSchemaFieldNames(s)),
+	)
 
 	return &GroupByExec{
 		input:       child,
@@ -55,9 +62,11 @@ func NewGroupByExec(child operators.Operator, groupExpr []AggregateFunctions, gr
 grab child rows
 */
 func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if g.done {
 		return nil, io.EOF
 	}
+	logger.Debug("GroupBy operator starting", zap.Int("num_group_by_cols", len(g.groupByExpr)), zap.Int("num_aggregations", len(g.groupExpr)))
 
 	for {
 		childBatch, err := g.input.Next(batchSize)
@@ -155,6 +164,7 @@ func (g *GroupByExec) Next(batchSize uint16) (*operators.RecordBatch, error) {
 		operators.ReleaseArrays(childBatch.Columns)
 	}
 
+	logger.Info("GroupBy aggregation complete", zap.Int("num_groups", len(g.groups)))
 	// 4. Build output RecordBatch
 	batch := buildGroupByOutput(g)
 
@@ -186,7 +196,7 @@ func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression
 		}
 
 		fields = append(fields, arrow.Field{
-			Name:     fmt.Sprintf("group_%s", expr.String()),
+			Name:     Expr.To_aggr_name(expr),
 			Type:     dt,
 			Nullable: true,
 		})
@@ -199,10 +209,11 @@ func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression
 			return nil, ErrInvalidAggrColumnType(dt)
 		}
 		// All aggregates produce float64
-		fieldName := fmt.Sprintf("%s_%s",
+		/*fieldName := fmt.Sprintf("%s_%s",
 			strings.ToLower(aggrToString(int(agg.AggrFunc))),
 			agg.Child.String(),
-		)
+		)*/
+		fieldName := fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 
 		fields = append(fields, arrow.Field{
 			Name:     fieldName,

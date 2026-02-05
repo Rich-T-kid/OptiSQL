@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"regexp"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 var (
@@ -89,6 +91,19 @@ type Expression interface {
 	// empty method, only for the sake of polymorphism
 	ExprNode()
 	fmt.Stringer
+}
+
+// To_aggr_name extracts the column name from an expression for use in aggregation schema building.
+// Returns the alias name if present, otherwise the column name.
+func To_aggr_name(expr Expression) string {
+	switch e := expr.(type) {
+	case *ColumnResolve:
+		return e.Name
+	case *Alias:
+		return e.Name
+	default:
+		return expr.String()
+	}
 }
 
 func EvalExpression(expr Expression, batch *operators.RecordBatch) (arrow.Array, error) {
@@ -199,7 +214,7 @@ func EvalColumn(c *ColumnResolve, batch *operators.RecordBatch) (arrow.Array, er
 	for i, f := range batch.Schema.Fields() {
 		if f.Name == c.Name {
 			col := batch.Columns[i]
-			col.Retain()
+			//col.Retain()
 			return col, nil
 		}
 	}
@@ -437,6 +452,7 @@ func NewBinaryExpr(left Expression, op BinaryOperator, right Expression) *Binary
 }
 
 func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error) {
+	logger := config.GetLogger()
 	leftArr, err := EvalExpression(b.Left, batch)
 	if err != nil {
 		return nil, err
@@ -445,6 +461,11 @@ func EvalBinary(b *BinaryExpr, batch *operators.RecordBatch) (arrow.Array, error
 	if err != nil {
 		return nil, err
 	}
+	logger.Debug("Evaluating binary expression",
+		zap.String("operator", fmt.Sprintf("%v", b.Op)),
+		zap.Int("left_len", leftArr.Len()),
+		zap.Int("right_len", rightArr.Len()),
+	)
 	ctx := context.Background()
 	opt := compute.ArithmeticOptions{}
 	switch b.Op {

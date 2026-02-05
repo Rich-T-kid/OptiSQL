@@ -2,11 +2,9 @@ package aggr
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"opti-sql-go/Expr"
 	"opti-sql-go/operators/project"
-	"strings"
 	"testing"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -158,17 +156,14 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 
 		// group field
 		f0 := schema.Field(0)
-		expName := "group_" + groupBy[0].String()
+		expName := Expr.To_aggr_name(groupBy[0])
 		if f0.Name != expName {
 			t.Fatalf("expected group field name %q, got %q", expName, f0.Name)
 		}
 
 		// aggregate field
 		f1 := schema.Field(1)
-		properAggName := fmt.Sprintf("%s_%s",
-			strings.ToLower(aggrToString(int(aggs[0].AggrFunc))),
-			aggs[0].Child.String(),
-		)
+		properAggName := Expr.To_aggr_name(aggs[0].Child)
 		if f1.Name != properAggName {
 			t.Fatalf("expected agg field %q, got %q", properAggName, f1.Name)
 		}
@@ -205,7 +200,7 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 		// group fields first
 		for i, gexpr := range groupBy {
 			f := schema.Field(i)
-			exp := "group_" + gexpr.String()
+			exp := Expr.To_aggr_name(gexpr)
 			if f.Name != exp {
 				t.Fatalf("group field[%d] mismatch: want %q got %q", i, exp, f.Name)
 			}
@@ -215,10 +210,7 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 		offset := len(groupBy)
 		for j, agg := range aggs {
 			f := schema.Field(offset + j)
-			expAggName := fmt.Sprintf("%s_%s",
-				strings.ToLower(aggrToString(int(agg.AggrFunc))),
-				agg.Child.String(),
-			)
+			expAggName := Expr.To_aggr_name(agg.Child)
 			if f.Name != expAggName {
 				t.Fatalf("agg field name mismatch: want %q got %q", expAggName, f.Name)
 			}
@@ -263,7 +255,7 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 		}
 
 		f := schema.Field(0)
-		exp := "group_" + groupBy[0].String()
+		exp := Expr.To_aggr_name(groupBy[0])
 		if f.Name != exp {
 			t.Fatalf("wrong group field name: want %q got %q", exp, f.Name)
 		}
@@ -316,8 +308,8 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 
 		schema := gb.Schema()
 
-		expected0 := "group_" + gbExpr[0].String() // group_Column(seniority)
-		expected1 := "group_" + gbExpr[1].String() // group_Column(region)
+		expected0 := Expr.To_aggr_name(gbExpr[0]) // seniority
+		expected1 := Expr.To_aggr_name(gbExpr[1]) // region
 
 		if schema.Field(0).Name != expected0 {
 			t.Fatalf("wrong field[0] name: want %q got %q", expected0, schema.Field(0).Name)
@@ -327,7 +319,7 @@ func TestNewGroupByExecAndSchema(t *testing.T) {
 		}
 
 		// count column
-		expectedAgg := "count_" + aggs[0].Child.String()
+		expectedAgg := Expr.To_aggr_name(aggs[0].Child)
 		if schema.Field(2).Name != expectedAgg {
 			t.Fatalf("wrong agg field name: want %q got %q", expectedAgg, schema.Field(2).Name)
 		}

@@ -18,6 +18,16 @@ var (
 	}
 )
 
+// GetSchemaFieldNames returns the names of all fields in a schema
+// Useful for debugging and logging
+func GetSchemaFieldNames(s *arrow.Schema) []string {
+	names := make([]string, s.NumFields())
+	for i := 0; i < s.NumFields(); i++ {
+		names[i] = s.Field(i).Name
+	}
+	return names
+}
+
 type Operator interface {
 	Next(uint16) (*RecordBatch, error)
 	Schema() *arrow.Schema
@@ -405,6 +415,9 @@ func (rb *RecordBatch) ToCSV() ([]byte, error) {
 
 			switch arr := col.(type) {
 			case *array.String:
+				record[colIdx] = arr.Value(row)
+
+			case *array.LargeString:
 				record[colIdx] = arr.Value(row)
 
 			case *array.Int64:

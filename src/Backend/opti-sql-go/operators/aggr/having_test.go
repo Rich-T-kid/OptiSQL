@@ -3,6 +3,7 @@ package aggr
 import (
 	"errors"
 	"io"
+	"math"
 	"strings"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 			t.Fatalf("unexpected GroupBy error: %v", err)
 		}
 
-		sumCol := "sum_Column(salary)"
+		sumCol := "salary"
 
 		// SUM(salary) > 600000
 		havingExpr := Expr.NewBinaryExpr(
@@ -76,7 +77,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 			t.Fatalf("unexpected GroupBy err: %v", err)
 		}
 
-		countCol := "count_Column(id)"
+		countCol := "id"
 
 		havingExpr := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve(countCol),
@@ -113,7 +114,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 
 		gb, _ := NewGroupByExec(child, aggs, groupBy)
 
-		sumCol := "sum_Column(salary)"
+		sumCol := "salary"
 
 		// Impossible condition
 		havingExpr := Expr.NewBinaryExpr(
@@ -148,7 +149,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 		gb, _ := NewGroupByExec(child, aggs, groupBy)
 
 		// invalid: resolves to float, not boolean
-		invalidExpr := Expr.NewColumnResolve("sum_Column(salary)")
+		invalidExpr := Expr.NewColumnResolve("salary")
 
 		having, _ := NewHavingExec(gb, invalidExpr)
 
@@ -175,7 +176,7 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 
 		gb, _ := NewGroupByExec(child, aggs, groupBy)
 
-		countCol := "count_Column(id)"
+		countCol := "id"
 
 		havingExpr := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve(countCol),
@@ -184,9 +185,9 @@ func TestHavingExec_OnGroupBy(t *testing.T) {
 		)
 
 		h, _ := NewHavingExec(gb, havingExpr)
-		h.done = true
 
-		_, err := h.Next(10)
+		_, err := h.Next(math.MaxUint16)
+		_, err = h.Next(math.MaxUint16)
 		if !errors.Is(err, io.EOF) {
 			t.Fatalf("expected EOF, got: %v", err)
 		}

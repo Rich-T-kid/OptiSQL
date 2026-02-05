@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"sort"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/compute"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 // order by col asc, col 2 desc .... etc
@@ -76,10 +78,12 @@ func NewSortExec(child operators.Operator, sortKeys []SortKey) (*SortExec, error
 // n is the number of records we will return,sortExec will read in 2^16-1 column entries from its child, this is more efficient that trusting the caller to pass in a reasonable
 // n so that we avoid small/frequent IO operations
 func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	if s.done {
 		return nil, io.EOF
 	}
 	if !s.consumed {
+		logger.Debug("Sort operator consuming input", zap.Int("sort_keys", len(s.sortKeys)))
 		allColumns := make([]arrow.Array, len(s.schema.Fields())) // concated columns
 		mem := memory.NewGoAllocator()
 		var count uint64
@@ -107,6 +111,7 @@ func (s *SortExec) Next(n uint16) (*operators.RecordBatch, error) {
 		if len(allColumns) > 0 {
 			count = uint64(allColumns[0].Len())
 		}
+		logger.Info("Sort operator consumed all input", zap.Uint64("total_rows", count), zap.Int("num_columns", len(allColumns)))
 		idx, err := sortBatches(&operators.RecordBatch{
 			Schema:   s.schema,
 			Columns:  allColumns,

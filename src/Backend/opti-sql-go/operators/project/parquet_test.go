@@ -11,9 +11,17 @@ import (
 )
 
 const ParquetTestDatafile = "../../../test_data/parquet/capitals_clean.parquet"
+const ParquetTestDatafile2 = "../../../test_data/parquet/fortune1000_2024.parquet"
 
 func getTestParquetFile() *os.File {
 	file, err := os.Open(ParquetTestDatafile)
+	if err != nil {
+		panic(err)
+	}
+	return file
+}
+func getTestParquetFile2() *os.File {
+	file, err := os.Open(ParquetTestDatafile2)
 	if err != nil {
 		panic(err)
 	}
@@ -720,4 +728,52 @@ func TestCombineArray_UnsupportedType(t *testing.T) {
 
 	// Call CombineArray with unsupported type
 	_ = CombineArray(arr, arr)
+}
+
+// ! test that you get back the number of records you requested and set
+func TestRecordBatchCount(t *testing.T) {
+	tests := []struct {
+		id            int
+		expectedCount uint16
+	}{
+		{
+			id:            1,
+			expectedCount: 10,
+		},
+		{
+			id:            2,
+			expectedCount: 1,
+		},
+
+		{
+			id:            3,
+			expectedCount: 500,
+		},
+		{
+			id:            4,
+			expectedCount: 27,
+		},
+		{
+			id:            1,
+			expectedCount: 909,
+		},
+	}
+	for _, tt := range tests {
+		f := getTestParquetFile2()
+		pq, err := NewParquetSource(f)
+		if err != nil {
+			t.Fatalf("failed to create parquet source node: %v\n", err)
+		}
+
+		rc, err := pq.Next(tt.expectedCount)
+		if err != nil {
+			t.Fatalf("failed to read %d record batches:%v\n", tt.expectedCount, err)
+		}
+		// should return up to the requested amount,
+		if rc.RowCount != uint64(tt.expectedCount) {
+			t.Errorf("test id:%d failed to return %d record batches , returned %d", tt.id, tt.expectedCount, rc.RowCount)
+		}
+
+	}
+
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"opti-sql-go/Expr"
+	"opti-sql-go/config"
 	"opti-sql-go/operators"
 	"opti-sql-go/operators/aggr"
 	"opti-sql-go/operators/filter"
@@ -19,6 +20,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
+	"go.uber.org/zap"
 )
 
 var (
@@ -47,27 +49,37 @@ type Emiter struct {
 }
 
 func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
+	logger := config.GetLogger()
 	var results *operators.RecordBatch
+	logger.Info("Starting consumeAll", zap.String("operator", e.emitOperator.Name()), zap.String("plan_id", e.p.id))
+	logger.Debug("Inner operator name", zap.String("operator", e.emitOperator.Name()))
 	mem := memory.NewGoAllocator()
+	iterationCount := 0
 	for {
 		intermediate, err := e.emitOperator.Next(math.MaxInt16)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				logger.Info("Reached EOF", zap.Int("iterations", iterationCount))
 				break
 			}
+			logger.Error("Error fetching next batch", zap.Error(err), zap.Int("iteration", iterationCount))
 			return nil, err
 		}
+		iterationCount++
 		// first iteration set results to the intermediate results
 		if results == nil {
+			logger.Info("First batch received", zap.Uint64("rows", intermediate.RowCount), zap.Int("columns", len(intermediate.Columns)))
 			results = intermediate
 			continue
 		}
 		// otherwise just append for each idx
+		logger.Debug("Concatenating batch", zap.Uint64("new_rows", intermediate.RowCount), zap.Uint64("total_rows", results.RowCount))
 		for i := range intermediate.Columns {
 			oldArr := results.Columns[i]
 			newArr := intermediate.Columns[i]
 			joinArr, err := array.Concatenate([]arrow.Array{oldArr, newArr}, mem)
 			if err != nil {
+				logger.Error("Failed to concatenate arrays", zap.Error(err), zap.Int("column_index", i))
 				return nil, err
 			}
 			results.Columns[i] = joinArr
@@ -76,12 +88,16 @@ func (e *Emiter) consumeAll() (*operators.RecordBatch, error) {
 
 	}
 	// delete source files
+	logger.Info("Cleaning up local files", zap.Int("file_count", len(e.p.localFileNames)))
 	for _, file := range e.p.localFileNames {
 		if err := os.Remove(file); err != nil {
+			logger.Error("Failed to delete local file", zap.Error(err), zap.String("file", file))
 			return nil, err
 		}
+		logger.Debug("Deleted local file", zap.String("file", file))
 	}
 	_ = e.emitOperator.Close()
+	logger.Info("consumeAll completed", zap.Uint64("total_rows", results.RowCount), zap.Int("total_columns", len(results.Columns)))
 	return results, nil
 }
 
@@ -101,124 +117,160 @@ func newPlanMetaData(id string) *planMetaData {
 
 // first turn into json. The plan should fit into ram to consume it all
 func consumePlan(r io.Reader, p *planMetaData) (*Emiter, error) {
+	logger := config.GetLogger()
+	logger.Info("Starting plan consumption", zap.String("plan_id", p.id))
 
 	contents, err := io.ReadAll(r)
 	if err != nil {
+		logger.Error("Failed to read plan", zap.Error(err))
 		return nil, err
 	}
+	logger.Debug("Plan read successfully", zap.Int("bytes", len(contents)))
+
 	inMemoryRepr := make(jsonOBJ)
 	err = json.Unmarshal(contents, &inMemoryRepr)
 	if err != nil {
+		logger.Error("Failed to unmarshal JSON plan", zap.Error(err))
 		return nil, ErrInvalidSubstraitPlan(err)
 	}
 	if len(inMemoryRepr) != 1 {
+		logger.Error("Malformed plan body", zap.Int("root_count", len(inMemoryRepr)))
 		return nil, ErrMalformedEmitBody
 	}
 	_, exist := inMemoryRepr["Emit"] // TODO! standerdize the spelling and casing of this or else everythign else will break
 	if !exist {
+		logger.Error("Missing Emit operator")
 		return nil, ErrMissingEmitOperator
 	}
 	tree, ok := inMemoryRepr["Emit"].(map[string]any)
 	if !ok {
+		logger.Error("Invalid Emit children type")
 		return nil, ErrInvalidEmitChildren
 	}
+	logger.Info("Plan structure validated, building operator tree")
 	return buildTree(tree, p)
 }
 
 func buildTree(m jsonOBJ, plan *planMetaData) (*Emiter, error) {
+	logger := config.GetLogger()
 	//key=Operator , value=arguments to that operator
 
 	// the tree needs to be built from the bottom up. Recurse all the way down until you reach a leaf node || key == "Source"
 	const operator = "Operator"
 
 	if err := containsFields([]string{operator}, m); err != nil {
+		logger.Error("Missing operator field in tree node", zap.Error(err))
 		return nil, err
 	}
 	if err := correctFieldTypes([]string{operator}, []string{"string"}, m); err != nil {
+		logger.Error("Invalid operator field type", zap.Error(err))
 		return nil, err
 	}
 
 	operatorNode := m[operator].(string)
+	logger.Info("Building operator", zap.String("operator_type", operatorNode))
 	body := m[operatorNode].(map[string]any)
 	var op operators.Operator
 	switch strings.ToLower(operatorNode) {
 	case "filter":
 		filterOP, err := parseFilter(body, plan)
 		if err != nil {
+			logger.Error("Failed to build filter operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("filter", err.Error())
 		}
 		op = filterOP
+		logger.Info("Filter operator built successfully")
 		return &Emiter{op, plan}, nil
 	case "project":
 		projectOP, err := parseProject(body, plan)
 		if err != nil {
+			logger.Error("Failed to build project operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("project", err.Error())
 		}
 		op = projectOP
+		logger.Info("Project operator built successfully")
 		return &Emiter{op, plan}, nil
 	case "sort":
 		sortOP, err := parseSort(body, plan)
 		if err != nil {
+			logger.Error("Failed to build sort operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("sort", err.Error())
 		}
 		op = sortOP
+		logger.Info("Sort operator built successfully")
 		return &Emiter{op, plan}, nil
 
 	case "distinct":
 		distinctOP, err := parseDistinct(body, plan)
 		if err != nil {
+			logger.Error("Failed to build distinct operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("distinct", err.Error())
 		}
 		op = distinctOP
+		logger.Info("Distinct operator built successfully")
 		return &Emiter{op, plan}, nil
 	case "limit":
 		limitOP, err := parseLimit(body, plan)
 		if err != nil {
+			logger.Error("Failed to build limit operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("limit", err.Error())
 		}
 		op = limitOP
+		logger.Info("Limit operator built successfully")
 		return &Emiter{op, plan}, nil
 	case "aggregate":
 		aggrOP, err := parseSingleAggr(body, plan)
 		if err != nil {
+			logger.Error("Failed to build aggregate operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("single-aggr", err.Error())
 		}
 		op = aggrOP
+		logger.Info("Aggregate operator built successfully")
 		return &Emiter{op, plan}, nil
 	case "groupby":
 		groupByOP, err := parseGroupBy(body, plan)
 		if err != nil {
+			logger.Error("Failed to build groupby operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("group-by", err.Error())
 		}
 		op = groupByOP
+		logger.Info("GroupBy operator built successfully")
 		return &Emiter{op, plan}, err
 
 	case "join":
 		joinOP, err := parseJoin(body, plan)
 		if err != nil {
+			logger.Error("Failed to build join operator", zap.Error(err))
 			return nil, ErrBuildTreeFailed("join", err.Error())
 		}
 		op = joinOP
+		logger.Info("Join operator built successfully")
 		return &Emiter{op, plan}, err
 
 	case "source", "expression": // invalid branch
 		//(1) Source:cannot directy return from source
 		//(2) expressions: cannot directy return expressions, need to call project on top
+		logger.Error("Invalid operator cannot be called before Emit", zap.String("operator", operatorNode))
 		return nil, ErrInvalidOperator(operatorNode)
 	}
+	logger.Error("Unknown operator type", zap.String("operator", operatorNode))
 	return nil, ErrBuildTreeFailed("unknown", "no valid operator found in logical plan")
 }
 func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, error) {
+	logger := config.GetLogger()
 	fields := []string{"file-name", "local"}
 	err := containsFields(fields, sourceOBJ)
 	if err != nil {
+		logger.Error("Missing required fields in source", zap.Error(err))
 		return nil, err
 	}
 	err = correctFieldTypes(fields, []string{"string", "boolean"}, sourceOBJ)
 	if err != nil {
+		logger.Error("Invalid field types in source", zap.Error(err))
 		return nil, err
 	}
 	name := sourceOBJ["file-name"].(string)
+	logger.Info("Parsing source", zap.String("file_name", name))
 	pieces := strings.Split(name, ".")
 	if len(pieces) < 1 {
 		return nil, fmt.Errorf("invalid file name used as source, must end in .csv or .parquet")
@@ -254,14 +306,18 @@ func parseSource(sourceOBJ jsonOBJ, plan *planMetaData) (operators.Operator, err
 	case "csv":
 		csvRootNode, err := project.NewProjectCSVLeaf(localFile)
 		if err != nil {
+			logger.Error("Failed to create CSV source", zap.Error(err))
 			return nil, err
 		}
+		logger.Info("CSV source created successfully", zap.String("file", name))
 		return csvRootNode, nil
 	case "parquet":
 		parquetRootNode, err := project.NewParquetSource(localFile)
 		if err != nil {
+			logger.Error("Failed to create Parquet source", zap.Error(err))
 			return nil, err
 		}
+		logger.Info("Parquet source created successfully", zap.String("file", name))
 		return parquetRootNode, nil
 	}
 	return nil, nil
@@ -721,13 +777,17 @@ func parseHaving(havingOBJ jsonOBJ, plan *planMetaData) (operators.Operator, err
 
 // expressions need to be handled in a special way since they contain serveral keys
 func parseExpression(m jsonOBJ) (Expr.Expression, error) {
+	logger := config.GetLogger()
 	// grab tje expr_type and then parse based on that
-	fmt.Printf("(IN) json object passed in for expression parsing: %v\n", m)
+	logger.Debug("JSON object passed in for expression parsing", zap.Any("json_object", m))
 	err := containsFields([]string{"expr_type"}, m)
 	if err != nil {
+		logger.Error("Malformed expression: missing expr_type", zap.Error(err))
 		return nil, fmt.Errorf("malformed expression body. Doesnt contain expr_type field")
 	}
-	switch m["expr_type"].(string) {
+	exprType := m["expr_type"].(string)
+	logger.Debug("Parsing expression", zap.String("expr_type", exprType))
+	switch exprType {
 	case "ColumnResolve":
 		neededFields := []string{"name"}
 		fieldTypes := []string{"string"}
@@ -757,7 +817,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 		}
 		var value any
 		var arrowType arrow.DataType
-		fmt.Printf("(Literal Resolve): raw_value:%v , lit_type:%v\n", m["value"], m["lit_type"])
+		logger.Debug("Parsing LiteralResolve", zap.Any("raw_value", m["value"]), zap.Any("lit_type", m["lit_type"]))
 		switch m["lit_type"].(string) {
 		case "int":
 			arrowType = arrow.PrimitiveTypes.Int64
@@ -809,7 +869,7 @@ func parseExpression(m jsonOBJ) (Expr.Expression, error) {
 			return nil, err
 		}
 		binaryExpression := Expr.NewBinaryExpr(left, operator, right)
-		fmt.Printf("(OUT) expression: %v\n", binaryExpression)
+		logger.Debug("BinaryExpr created", zap.String("expression", fmt.Sprintf("%v", binaryExpression)))
 		return binaryExpression, nil
 	case "ScalarFunction":
 		neededFields := []string{"func", "expr"}
@@ -1085,7 +1145,8 @@ func toAggrFn(s string) aggr.AggrFunc {
 	case "max":
 		return aggr.Max
 	}
-	fmt.Printf("got %s which is not supported", s)
+	logger := config.GetLogger()
+	logger.Error("Unsupported aggregation function", zap.String("function", s))
 	return -1
 }
 
