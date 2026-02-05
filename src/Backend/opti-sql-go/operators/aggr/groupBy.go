@@ -38,10 +38,15 @@ type GroupByExec struct {
 }
 
 func NewGroupByExec(child operators.Operator, groupExpr []AggregateFunctions, groupBy []Expr.Expression) (*GroupByExec, error) {
+	logger := config.GetLogger()
 	s, err := buildGroupBySchema(child.Schema(), groupBy, groupExpr)
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("GroupBy schema created",
+		zap.Strings("input_columns", operators.GetSchemaFieldNames(child.Schema())),
+		zap.Strings("output_columns", operators.GetSchemaFieldNames(s)),
+	)
 
 	return &GroupByExec{
 		input:       child,
@@ -191,7 +196,7 @@ func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression
 		}
 
 		fields = append(fields, arrow.Field{
-			Name:     fmt.Sprintf("group_%s", expr.String()),
+			Name:     Expr.To_aggr_name(expr),
 			Type:     dt,
 			Nullable: true,
 		})
@@ -204,10 +209,11 @@ func buildGroupBySchema(childSchema *arrow.Schema, groupByExpr []Expr.Expression
 			return nil, ErrInvalidAggrColumnType(dt)
 		}
 		// All aggregates produce float64
-		fieldName := fmt.Sprintf("%s_%s",
+		/*fieldName := fmt.Sprintf("%s_%s",
 			strings.ToLower(aggrToString(int(agg.AggrFunc))),
 			agg.Child.String(),
-		)
+		)*/
+		fieldName := fmt.Sprintf("%s", Expr.To_aggr_name(agg.Child))
 
 		fields = append(fields, arrow.Field{
 			Name:     fieldName,

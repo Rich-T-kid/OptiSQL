@@ -93,6 +93,19 @@ type Expression interface {
 	fmt.Stringer
 }
 
+// To_aggr_name extracts the column name from an expression for use in aggregation schema building.
+// Returns the alias name if present, otherwise the column name.
+func To_aggr_name(expr Expression) string {
+	switch e := expr.(type) {
+	case *ColumnResolve:
+		return e.Name
+	case *Alias:
+		return e.Name
+	default:
+		return expr.String()
+	}
+}
+
 func EvalExpression(expr Expression, batch *operators.RecordBatch) (arrow.Array, error) {
 	switch e := expr.(type) {
 	case *Alias:

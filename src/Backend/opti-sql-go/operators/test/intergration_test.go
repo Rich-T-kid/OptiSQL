@@ -92,7 +92,7 @@ func TestSelectFilterLimit(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		projExprs := Expr.NewExpressions(
@@ -102,17 +102,17 @@ func TestSelectFilterLimit(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, projExprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		lim, err := filter.NewLimitExec(proj, 10)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(10)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		if batch == nil {
@@ -141,7 +141,7 @@ func TestSelectFilterLimit(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		projExprs := Expr.NewExpressions(
@@ -150,17 +150,17 @@ func TestSelectFilterLimit(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, projExprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		lim, err := filter.NewLimitExec(proj, 3)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		if batch == nil {
@@ -182,7 +182,7 @@ func TestSelectFilterLimit(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		projExprs := Expr.NewExpressions(
@@ -191,17 +191,17 @@ func TestSelectFilterLimit(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, projExprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		lim, err := filter.NewLimitExec(proj, 7)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 
 		if batch == nil {
@@ -231,7 +231,7 @@ func TestFilterScalarFunctions(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		exprs := Expr.NewExpressions(
@@ -241,12 +241,12 @@ func TestFilterScalarFunctions(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(2A) got nil batch (possibly EOF)")
@@ -267,7 +267,7 @@ func TestFilterScalarFunctions(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		exprs := Expr.NewExpressions(
@@ -276,14 +276,14 @@ func TestFilterScalarFunctions(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch != nil {
-			t.Fatalf("was expecting an empty batch but recieved %s\n", batch.PrettyPrint())
+			t.Errorf("was expecting an empty batch but recieved %s\n", batch.PrettyPrint())
 			return
 		}
 	})
@@ -304,17 +304,17 @@ func TestSelectSort(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		sk := aggr.NewSortKey(Expr.NewColumnResolve("account_balance_usd"), true)
 		sortExec, err := aggr.NewSortExec(proj, aggr.CombineSortKeys(sk))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 		batch, err := sortExec.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(3A) got nil batch (possibly EOF)")
@@ -332,16 +332,16 @@ func TestSelectSort(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 		sk := aggr.NewSortKey(Expr.NewColumnResolve("favorite_color"), true)
 		sortExec, err := aggr.NewSortExec(proj, aggr.CombineSortKeys(sk))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 		batch, err := sortExec.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(3B) got nil batch (possibly EOF)")
@@ -366,7 +366,7 @@ func TestJoinSelect(t *testing.T) {
 		)
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("join init failed: %v", err)
+			t.Errorf("join init failed: %v", err)
 		}
 		exprs := Expr.NewExpressions(
 			Expr.NewAlias(Expr.NewColumnResolve("left_id"), "id"),
@@ -376,11 +376,11 @@ func TestJoinSelect(t *testing.T) {
 		t.Logf("\t%v\n", j.Schema())
 		proj, err := project.NewProjectExec(j, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(4A) got nil batch (possibly EOF)")
@@ -399,7 +399,7 @@ func TestJoinSelect(t *testing.T) {
 		)
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("join init failed: %v", err)
+			t.Errorf("join init failed: %v", err)
 		}
 		exprs := Expr.NewExpressions(
 			Expr.NewAlias(Expr.NewColumnResolve("left_id"), "cool_guy_id"),
@@ -408,11 +408,11 @@ func TestJoinSelect(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(j, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(4B) got nil batch (possibly EOF)")
@@ -423,6 +423,7 @@ func TestJoinSelect(t *testing.T) {
 }
 
 func TestGroupByAggregation(t *testing.T) {
+	// ! query doesnt match code
 	// (5.A) SELECT favorite_color, AVG(age_years) AS avg_age, SUM(account_balance_usd) AS total_balance FROM source1 GROUP BY favorite_color order by avg_age;
 	t.Run("5A", func(t *testing.T) {
 		src := source1Project()
@@ -435,16 +436,16 @@ func TestGroupByAggregation(t *testing.T) {
 
 		gb, err := aggr.NewGroupByExec(src, aggs, groupBy)
 		if err != nil {
-			t.Fatalf("groupby init failed: %v", err)
+			t.Errorf("groupby init failed: %v", err)
 		}
-		sortExec, err := aggr.NewSortExec(gb, aggr.CombineSortKeys(aggr.NewSortKey(Expr.NewColumnResolve("avg_Column(age_years)"), true)))
+		sortExec, err := aggr.NewSortExec(gb, aggr.CombineSortKeys(aggr.NewSortKey(Expr.NewColumnResolve("age_years"), true)))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 
 		batch, err := sortExec.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(5A) got nil batch (possibly EOF)")
@@ -464,12 +465,12 @@ func TestGroupByAggregation(t *testing.T) {
 
 		gb, err := aggr.NewGroupByExec(src, aggs, groupBy)
 		if err != nil {
-			t.Fatalf("groupby init failed: %v", err)
+			t.Errorf("groupby init failed: %v", err)
 		}
 
 		batch, err := gb.Next(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(5B) got nil batch (possibly EOF)")
@@ -494,22 +495,22 @@ func TestDistinctSort(t *testing.T) {
 		cols := []Expr.Expression{Expr.NewColumnResolve("favorite_color")}
 		distinct, err := filter.NewDistinctExec(src, cols)
 		if err != nil {
-			t.Fatalf("distinct init failed: %v", err)
+			t.Errorf("distinct init failed: %v", err)
 		}
 
 		sk := aggr.NewSortKey(Expr.NewColumnResolve("favorite_color"), false) // DESC
 		sortExec, err := aggr.NewSortExec(distinct, aggr.CombineSortKeys(sk))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 		proj, err := project.NewProjectExec(sortExec, Expr.NewExpressions(Expr.NewColumnResolve("favorite_color")))
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(6A) got nil batch (possibly EOF)")
@@ -525,22 +526,22 @@ func TestDistinctSort(t *testing.T) {
 		cols := []Expr.Expression{Expr.NewColumnResolve("is_active")}
 		distinct, err := filter.NewDistinctExec(src, cols)
 		if err != nil {
-			t.Fatalf("distinct init failed: %v", err)
+			t.Errorf("distinct init failed: %v", err)
 		}
 
 		sk := aggr.NewSortKey(Expr.NewColumnResolve("is_active"), false) // DESC
 		sortExec, err := aggr.NewSortExec(distinct, aggr.CombineSortKeys(sk))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 		proj, err := project.NewProjectExec(sortExec, Expr.NewExpressions(Expr.NewColumnResolve("is_active")))
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(6B) got nil batch (possibly EOF)")
@@ -565,7 +566,7 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		)
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("join init failed: %v", err)
+			t.Errorf("join init failed: %v", err)
 		}
 		pred := Expr.NewBinaryExpr(
 			Expr.NewColumnResolve("age_years"),
@@ -575,7 +576,7 @@ func TestJoinFilterProjLimit(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(j, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		exprs := Expr.NewExpressions(
@@ -585,17 +586,17 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		lim, err := filter.NewLimitExec(proj, 5)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(7A) got nil batch (possibly EOF)")
@@ -614,7 +615,7 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		)
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("join init failed: %v", err)
+			t.Errorf("join init failed: %v", err)
 		}
 
 		pred := Expr.NewBinaryExpr(
@@ -625,7 +626,7 @@ func TestJoinFilterProjLimit(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(j, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		exprs := Expr.NewExpressions(
@@ -634,17 +635,17 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		lim, err := filter.NewLimitExec(proj, 3)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(7B) got nil batch (possibly EOF)")
@@ -663,7 +664,7 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		)
 		j, err := join.NewHashJoinExec(src1, src2, clause, join.InnerJoin, nil)
 		if err != nil {
-			t.Fatalf("join init failed: %v", err)
+			t.Errorf("join init failed: %v", err)
 		}
 
 		pred := Expr.NewBinaryExpr(
@@ -674,7 +675,7 @@ func TestJoinFilterProjLimit(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(j, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		exprs := Expr.NewExpressions(
@@ -683,17 +684,17 @@ func TestJoinFilterProjLimit(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		lim, err := filter.NewLimitExec(proj, 2)
 		if err != nil {
-			t.Fatalf("limit init failed: %v", err)
+			t.Errorf("limit init failed: %v", err)
 		}
 
 		batch, err := lim.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(7C) got nil batch (possibly EOF)")
@@ -733,7 +734,7 @@ func TestScalarAbsRound(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		// projection: id, ROUND(ABS(average_session_minutes)) as rounded_session
@@ -744,12 +745,12 @@ func TestScalarAbsRound(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(8A) got nil batch (possibly EOF)")
@@ -771,7 +772,7 @@ func TestScalarAbsRound(t *testing.T) {
 
 		filt, err := filter.NewFilterExec(src, pred)
 		if err != nil {
-			t.Fatalf("filter init failed: %v", err)
+			t.Errorf("filter init failed: %v", err)
 		}
 
 		roundExpr := Expr.NewScalarFunction(Expr.Round, Expr.NewColumnResolve("account_balance_usd"))
@@ -781,12 +782,12 @@ func TestScalarAbsRound(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(filt, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		batch, err := proj.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(8B) got nil batch (possibly EOF)")
@@ -810,19 +811,19 @@ func TestSelectMultiSort(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		sk1 := aggr.NewSortKey(Expr.NewColumnResolve("age_years"), false) // DESC
 		sk2 := aggr.NewSortKey(Expr.NewColumnResolve("username"), true)   // ASC
 		sortExec, err := aggr.NewSortExec(proj, aggr.CombineSortKeys(sk1, sk2))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 
 		batch, err := sortExec.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(9A) got nil batch (possibly EOF)")
@@ -841,19 +842,19 @@ func TestSelectMultiSort(t *testing.T) {
 		)
 		proj, err := project.NewProjectExec(src, exprs)
 		if err != nil {
-			t.Fatalf("project init failed: %v", err)
+			t.Errorf("project init failed: %v", err)
 		}
 
 		sk1 := aggr.NewSortKey(Expr.NewColumnResolve("age_years"), true)      // ASC
 		sk2 := aggr.NewSortKey(Expr.NewColumnResolve("email_address"), false) // DESC
 		sortExec, err := aggr.NewSortExec(proj, aggr.CombineSortKeys(sk1, sk2))
 		if err != nil {
-			t.Fatalf("sort init failed: %v", err)
+			t.Errorf("sort init failed: %v", err)
 		}
 
 		batch, err := sortExec.Next(100)
 		if err != nil && !errors.Is(err, io.EOF) {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if batch == nil {
 			t.Logf("(9B) got nil batch (possibly EOF)")

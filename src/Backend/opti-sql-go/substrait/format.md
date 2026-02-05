@@ -43,10 +43,8 @@ _The primary reason for this layer is flexibility. By decoupling intermediate da
     "input": {
       "Operator": "Source",
       "Source": {
-        "source-node": {
           "file-name": "country-full.csv",
           "local": false
-        }
       }
     },
     "expressions": [

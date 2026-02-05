@@ -18,6 +18,16 @@ var (
 	}
 )
 
+// GetSchemaFieldNames returns the names of all fields in a schema
+// Useful for debugging and logging
+func GetSchemaFieldNames(s *arrow.Schema) []string {
+	names := make([]string, s.NumFields())
+	for i := 0; i < s.NumFields(); i++ {
+		names[i] = s.Field(i).Name
+	}
+	return names
+}
+
 type Operator interface {
 	Next(uint16) (*RecordBatch, error)
 	Schema() *arrow.Schema
