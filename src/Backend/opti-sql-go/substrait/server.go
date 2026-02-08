@@ -181,9 +181,9 @@ func Start() chan struct{} {
 	RegisterSSOperationServer(grpcServer, ss)
 
 	stopChan := make(chan struct{})
-
 	log.Printf("Substrait server listening on port %d", c.Server.Port)
 	go unifiedShutdownHandler(ss, grpcServer, stopChan)
+	go garbageCollection()
 	go func() {
 		if err := grpcServer.Serve(*ss.listener); err != nil {
 			log.Fatalf("Failed to serve: %v", err)

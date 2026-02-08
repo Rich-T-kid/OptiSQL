@@ -189,10 +189,4 @@ docker buildx build \
  --push \
  .
 
-# ! TODO:
-
-# fix aliasing (group_by,universal_Aggrs,projects)
-
-# push up to ec2 instance to run parser
-
-# fix the casting issues for taking in floats/ints (cast ints to floats if needed)
+# TODO: remove env stuff
