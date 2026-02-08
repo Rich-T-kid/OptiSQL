@@ -28,6 +28,7 @@ type serverConfig struct {
 	Host             string `yaml:"host"`
 	Timeout          int    `yaml:"timeout"`
 	MaxRequestSizeMB uint64 `yaml:"max_request_size_mb"` // max size of a file upload. passed in by grpc request
+	RedisPort        string `yaml:"redis_port"`
 }
 type batchConfig struct {
 	Size                 int    `yaml:"size"`
@@ -68,6 +69,7 @@ var configInstance *Config = &Config{
 		Host:             "0.0.0.0",
 		Timeout:          30,
 		MaxRequestSizeMB: 15,
+		RedisPort:        "104.236.210.9",
 	},
 	Batch: batchConfig{
 		Size:                 1024 * 8, // rows per bathch
@@ -150,6 +152,9 @@ func mergeConfig(dst *Config, src map[string]interface{}) {
 		}
 		if v, ok := server["max_request_size_mb"].(int); ok {
 			dst.Server.MaxRequestSizeMB = uint64(v)
+		}
+		if v, ok := server["redis_port"].(string); ok {
+			dst.Server.RedisPort = v
 		}
 	}
 
